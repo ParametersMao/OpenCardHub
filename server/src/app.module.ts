@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
+import { AuthModule } from './modules/auth/auth.module';
 import { CapabilityModule } from './modules/capability/capability.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
 import { ConfigCenterModule } from './modules/config-center/config-center.module';
@@ -22,6 +23,7 @@ import { UserModule } from './modules/user/user.module';
     }),
     DatabaseModule,
     HealthModule,
+    AuthModule,
     ConfigCenterModule,
     UserModule,
     CapabilityModule,

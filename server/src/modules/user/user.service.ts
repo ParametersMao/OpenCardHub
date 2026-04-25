@@ -13,6 +13,7 @@ export class UserService {
       data: {
         username: input.username,
         passwordHash: this.hashPassword(input.password),
+        role: input.role ?? (input.levelCode === 'V0' ? 'buyer' : 'agent'),
         levelCode: input.levelCode,
         mobile: input.mobile,
         email: input.email,
@@ -32,6 +33,18 @@ export class UserService {
     return users.map((user) => this.mapUser(user));
   }
 
+  async findByUsername(username: string) {
+    return this.prisma.user.findUnique({
+      where: {
+        username,
+      },
+    });
+  }
+
+  verifyPassword(user: User, password: string) {
+    return user.passwordHash === this.hashPassword(password);
+  }
+
   private hashPassword(password: string) {
     return createHash('sha256').update(password).digest('hex');
   }
@@ -42,6 +55,7 @@ export class UserService {
       username: user.username,
       mobile: user.mobile,
       email: user.email,
+      role: user.role,
       levelCode: user.levelCode,
       status: user.status,
       balance: user.balance.toNumber(),

@@ -58,6 +58,7 @@ interface Site {
 interface User {
   id: string;
   username: string;
+  role: string;
   levelCode: string;
   status: string;
   balance: number;
@@ -81,6 +82,8 @@ const navItems: Array<{ key: ViewKey; label: string }> = [
 const activeView = ref<ViewKey>('overview');
 const loading = ref(false);
 const message = ref('');
+const accessToken = ref(localStorage.getItem('opencardhub_token') ?? '');
+const currentUser = ref<User | null>(null);
 const levels = ref<Level[]>([]);
 const categories = ref<Category[]>([]);
 const products = ref<Product[]>([]);
@@ -92,6 +95,11 @@ const userForm = ref({
   username: '',
   password: '',
   levelCode: 'V0',
+  role: 'buyer',
+});
+const loginForm = ref({
+  username: 'admin',
+  password: '123456',
 });
 const categoryForm = ref({ name: '' });
 const productForm = ref({
@@ -127,25 +135,67 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     headers: {
       'Content-Type': 'application/json',
+      ...(accessToken.value
+        ? { Authorization: `Bearer ${accessToken.value}` }
+        : {}),
       ...options?.headers,
     },
     ...options,
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      accessToken.value = '';
+      currentUser.value = null;
+      localStorage.removeItem('opencardhub_token');
+    }
     throw new Error(await response.text());
   }
 
   return response.json() as Promise<T>;
 }
 
-async function loadAll() {
+async function login() {
   loading.value = true;
   message.value = '';
 
   try {
-    const [persistedLevels, userList, categoryList, productList, siteList] =
+    const result = await request<{
+      accessToken: string;
+      user: User;
+    }>('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(loginForm.value),
+    });
+    accessToken.value = result.accessToken;
+    currentUser.value = result.user;
+    localStorage.setItem('opencardhub_token', result.accessToken);
+    await loadAll();
+  } catch (error) {
+    message.value = error instanceof Error ? error.message : '登录失败';
+  } finally {
+    loading.value = false;
+  }
+}
+
+function logout() {
+  accessToken.value = '';
+  currentUser.value = null;
+  localStorage.removeItem('opencardhub_token');
+}
+
+async function loadAll() {
+  if (!accessToken.value) {
+    return;
+  }
+
+  loading.value = true;
+  message.value = '';
+
+  try {
+    const [me, persistedLevels, userList, categoryList, productList, siteList] =
       await Promise.all([
+        request<User>('/api/auth/me'),
         request<Level[]>('/api/capabilities/levels/persisted'),
         request<User[]>('/api/users'),
         request<Category[]>('/api/catalog/categories'),
@@ -153,6 +203,7 @@ async function loadAll() {
         request<Site[]>('/api/sites'),
       ]);
 
+    currentUser.value = me;
     levels.value = persistedLevels;
     users.value = userList;
     categories.value = categoryList;
@@ -197,6 +248,7 @@ async function createUser() {
     username: '',
     password: '',
     levelCode: 'V0',
+    role: 'buyer',
   };
   await loadAll();
 }
@@ -291,12 +343,64 @@ async function createSite() {
 }
 
 onMounted(() => {
-  void loadAll();
+  if (accessToken.value) {
+    void loadAll();
+  }
 });
 </script>
 
 <template>
-  <div class="app-shell">
+  <main
+    v-if="!accessToken"
+    class="login-shell"
+  >
+    <section class="login-panel">
+      <div class="brand login-brand">
+        <span class="brand-mark">O</span>
+        <div>
+          <strong>OpenCardHub</strong>
+          <small>Admin Console</small>
+        </div>
+      </div>
+      <h1>管理员登录</h1>
+      <p class="login-copy">
+        使用总后台账号进入配置中心、商品、库存和分站管理。
+      </p>
+      <form
+        class="form-grid single"
+        @submit.prevent="login"
+      >
+        <label>
+          用户名
+          <input v-model="loginForm.username">
+        </label>
+        <label>
+          密码
+          <input
+            v-model="loginForm.password"
+            type="password"
+          >
+        </label>
+        <button
+          class="solid-button"
+          type="submit"
+        >
+          登录
+        </button>
+      </form>
+      <p
+        v-if="message"
+        class="message"
+      >
+        {{ message }}
+      </p>
+    </section>
+  </main>
+
+  <div
+    v-else
+    class="app-shell"
+  >
     <aside class="sidebar">
       <div class="brand">
         <span class="brand-mark">O</span>
@@ -333,6 +437,13 @@ onMounted(() => {
           @click="loadAll"
         >
           刷新
+        </button>
+        <button
+          class="ghost-button"
+          type="button"
+          @click="logout"
+        >
+          退出
         </button>
       </header>
 
@@ -576,6 +687,20 @@ onMounted(() => {
                 </option>
               </select>
             </label>
+            <label>
+              角色
+              <select v-model="userForm.role">
+                <option value="buyer">
+                  buyer 买家
+                </option>
+                <option value="agent">
+                  agent 代理
+                </option>
+                <option value="admin">
+                  admin 管理员
+                </option>
+              </select>
+            </label>
             <button
               class="solid-button"
               type="submit"
@@ -595,6 +720,7 @@ onMounted(() => {
               <tr>
                 <th>ID</th>
                 <th>用户名</th>
+                <th>角色</th>
                 <th>等级</th>
                 <th>余额</th>
                 <th>状态</th>
@@ -607,6 +733,7 @@ onMounted(() => {
               >
                 <td>{{ user.id }}</td>
                 <td>{{ user.username }}</td>
+                <td>{{ user.role }}</td>
                 <td>{{ user.levelCode }}</td>
                 <td>{{ user.balance }}</td>
                 <td>{{ user.status }}</td>

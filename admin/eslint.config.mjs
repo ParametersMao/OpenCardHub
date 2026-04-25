@@ -11,6 +11,7 @@ export default tseslint.config(
     languageOptions: {
       globals: {
         fetch: "readonly",
+        localStorage: "readonly",
         RequestInit: "readonly",
       },
       parserOptions: {

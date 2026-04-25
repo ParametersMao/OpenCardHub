@@ -4,6 +4,9 @@ import {
   type LevelCode,
 } from '../../capability/capability.constants';
 
+const USER_ROLES = ['admin', 'agent', 'buyer'] as const;
+type UserRole = (typeof USER_ROLES)[number];
+
 export class CreateUserDto {
   @IsString()
   @MaxLength(64)
@@ -15,6 +18,10 @@ export class CreateUserDto {
 
   @IsIn(LEVEL_CODES)
   levelCode!: LevelCode;
+
+  @IsOptional()
+  @IsIn(USER_ROLES)
+  role?: UserRole;
 
   @IsOptional()
   @IsString()

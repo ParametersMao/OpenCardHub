@@ -1,8 +1,10 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { AdminGuard } from '../auth/admin.guard';
 import { ImportCardsDto } from './dto/import-cards.dto';
 import { LockCardsDto } from './dto/lock-cards.dto';
 import { InventoryService } from './inventory.service';
 
+@UseGuards(AdminGuard)
 @Controller('inventory')
 export class InventoryController {
   constructor(private readonly inventoryService: InventoryService) {}

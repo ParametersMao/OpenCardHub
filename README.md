@@ -105,6 +105,8 @@ Initial local endpoints:
 
 Initial API surfaces:
 
+- `POST /api/auth/login`
+- `GET /api/auth/me`
 - `GET /api/capabilities/keys`
 - `GET /api/capabilities/levels`
 - `POST /api/capabilities/levels/bootstrap`

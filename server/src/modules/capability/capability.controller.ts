@@ -1,4 +1,5 @@
-import { Controller, Get, Param, Post } from '@nestjs/common';
+import { Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { AdminGuard } from '../auth/admin.guard';
 import {
   CAPABILITY_KEYS,
   type CapabilityKey,
@@ -6,6 +7,7 @@ import {
 } from './capability.constants';
 import { CapabilityService } from './capability.service';
 
+@UseGuards(AdminGuard)
 @Controller('capabilities')
 export class CapabilityController {
   constructor(private readonly capabilityService: CapabilityService) {}

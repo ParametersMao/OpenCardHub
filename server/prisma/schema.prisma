@@ -18,6 +18,12 @@ enum UserStatus {
   disabled
 }
 
+enum UserRole {
+  admin
+  agent
+  buyer
+}
+
 enum SiteStatus {
   pending
   active
@@ -92,6 +98,7 @@ model User {
   passwordHash String        @map("password_hash") @db.VarChar(255)
   mobile       String?       @unique @db.VarChar(32)
   email        String?       @unique @db.VarChar(128)
+  role         UserRole      @default(buyer)
   levelCode    UserLevelCode @default(V0) @map("level_code")
   status       UserStatus    @default(active)
   parentId     BigInt?       @map("parent_id")
