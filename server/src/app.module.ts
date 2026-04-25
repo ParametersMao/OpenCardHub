@@ -8,6 +8,7 @@ import { DatabaseModule } from './modules/database/database.module';
 import { HealthModule } from './modules/health/health.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { OrderModule } from './modules/order/order.module';
+import { PaymentModule } from './modules/payment/payment.module';
 import { PricingModule } from './modules/pricing/pricing.module';
 
 @Module({
@@ -22,6 +23,7 @@ import { PricingModule } from './modules/pricing/pricing.module';
     CatalogModule,
     InventoryModule,
     OrderModule,
+    PaymentModule,
     PricingModule,
   ],
   controllers: [AppController],

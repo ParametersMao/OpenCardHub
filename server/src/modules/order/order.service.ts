@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import type { Order, Product } from '@prisma/client';
+import { Prisma, type Order, type Product } from '@prisma/client';
+import type { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../database/prisma.service';
 import type { CreateOrderDto } from './dto/create-order.dto';
 
@@ -119,6 +120,152 @@ export class OrderService {
     return orders.map((order) => this.mapOrder(order, order.product));
   }
 
+  async markOrderPaid(input: {
+    orderId: string;
+    provider: string;
+    paymentNo: string;
+    amount: Decimal;
+    rawNotify?: Record<string, unknown>;
+  }) {
+    const orderId = BigInt(input.orderId);
+    const now = new Date();
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const order = await tx.order.findUnique({
+        where: {
+          id: orderId,
+        },
+        include: {
+          product: true,
+        },
+      });
+
+      if (!order) {
+        throw new BadRequestException('Order not found.');
+      }
+
+      if (!order.totalAmount.equals(input.amount)) {
+        throw new BadRequestException('Payment amount does not match order amount.');
+      }
+
+      const payment = await tx.payment.upsert({
+        where: {
+          paymentNo: input.paymentNo,
+        },
+        create: {
+          orderId,
+          paymentNo: input.paymentNo,
+          provider: input.provider,
+          amount: input.amount,
+          status: 'paid',
+          rawNotifyJson: this.toPrismaJson(input.rawNotify),
+          paidAt: now,
+        },
+        update: {
+          status: 'paid',
+          rawNotifyJson: this.toPrismaJson(input.rawNotify),
+          paidAt: now,
+        },
+      });
+
+      if (order.paymentStatus === 'paid' && order.deliveryStatus === 'delivered') {
+        return {
+          order,
+          payment,
+          deliveredCards: await tx.orderCard.findMany({
+            where: {
+              orderId,
+            },
+          }),
+        };
+      }
+
+      const lockedCards = await tx.productCard.findMany({
+        where: {
+          lockedOrderId: orderId,
+          status: 'locked',
+        },
+        orderBy: {
+          id: 'asc',
+        },
+      });
+
+      if (lockedCards.length < order.quantity) {
+        throw new BadRequestException('Locked inventory is incomplete.');
+      }
+
+      for (const card of lockedCards) {
+        await tx.orderCard.upsert({
+          where: {
+            orderId_productCardId: {
+              orderId,
+              productCardId: card.id,
+            },
+          },
+          create: {
+            orderId,
+            productCardId: card.id,
+            cardContentSnapshot: card.cardContent,
+          },
+          update: {
+            cardContentSnapshot: card.cardContent,
+          },
+        });
+      }
+
+      await tx.productCard.updateMany({
+        where: {
+          id: {
+            in: lockedCards.map((card) => card.id),
+          },
+          status: 'locked',
+        },
+        data: {
+          status: 'sold',
+          soldOrderId: orderId,
+          soldAt: now,
+        },
+      });
+
+      const updatedOrder = await tx.order.update({
+        where: {
+          id: orderId,
+        },
+        data: {
+          paymentStatus: 'paid',
+          deliveryStatus: 'delivered',
+          orderStatus: 'completed',
+          paymentMethod: input.provider,
+          paidAt: now,
+          deliveredAt: now,
+        },
+        include: {
+          product: true,
+        },
+      });
+
+      return {
+        order: updatedOrder,
+        payment,
+        deliveredCards: await tx.orderCard.findMany({
+          where: {
+            orderId,
+          },
+        }),
+      };
+    });
+
+    return {
+      ...this.mapOrder(result.order, result.order.product),
+      paymentId: result.payment.id.toString(),
+      deliveredCards: result.deliveredCards.map((card) => ({
+        id: card.id.toString(),
+        productCardId: card.productCardId.toString(),
+        cardContent: card.cardContentSnapshot,
+      })),
+    };
+  }
+
   private mapOrder(order: Order, product?: Product) {
     return {
       id: order.id.toString(),
@@ -148,5 +295,11 @@ export class OrderService {
       .toString()
       .padStart(6, '0');
     return `OC${Date.now()}${random}`;
+  }
+
+  private toPrismaJson(
+    value: Record<string, unknown> | undefined,
+  ): Prisma.InputJsonValue | undefined {
+    return value as Prisma.InputJsonValue | undefined;
   }
 }
