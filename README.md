@@ -103,6 +103,16 @@ Initial local endpoints:
 - Backend health: `http://localhost:3000/api/health`
 - Admin frontend: `http://localhost:5173`
 
+Initial API surfaces:
+
+- `GET /api/capabilities/keys`
+- `GET /api/capabilities/levels`
+- `POST /api/capabilities/levels/bootstrap`
+- `GET /api/capabilities/levels/persisted`
+- `GET /api/config/settings`
+- `PUT /api/config/settings`
+- `POST /api/config/resolve`
+
 ## Repository Status
 
 This repository is currently in early scaffold stage.
