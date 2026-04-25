@@ -10,6 +10,7 @@ import { InventoryModule } from './modules/inventory/inventory.module';
 import { OrderModule } from './modules/order/order.module';
 import { PaymentModule } from './modules/payment/payment.module';
 import { PricingModule } from './modules/pricing/pricing.module';
+import { SiteModule } from './modules/site/site.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { PricingModule } from './modules/pricing/pricing.module';
     OrderModule,
     PaymentModule,
     PricingModule,
+    SiteModule,
   ],
   controllers: [AppController],
 })

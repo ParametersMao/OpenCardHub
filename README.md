@@ -124,6 +124,10 @@ Initial API surfaces:
 - `POST /api/orders`
 - `POST /api/payments/alipay/orders/:orderId`
 - `POST /api/payments/alipay/callback`
+- `GET /api/sites`
+- `POST /api/sites`
+- `POST /api/sites/domains`
+- `GET /api/sites/resolve`
 
 MySQL note:
 
