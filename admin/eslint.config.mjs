@@ -8,6 +8,15 @@ export default tseslint.config(
   ...vue.configs["flat/recommended"],
   {
     files: ["src/**/*.{ts,vue}"],
+    languageOptions: {
+      globals: {
+        fetch: "readonly",
+        RequestInit: "readonly",
+      },
+      parserOptions: {
+        parser: tseslint.parser,
+      },
+    },
     rules: {}
   }
 );
