@@ -5,14 +5,16 @@
   "description": "Configurable multi-tenant virtual goods distribution platform.",
   "workspaces": [
     "server",
-    "admin"
+    "admin",
+    "web"
   ],
   "scripts": {
     "dev": "npm run dev --workspace server",
     "dev:server": "npm run dev --workspace server",
     "dev:admin": "npm run dev --workspace admin",
-    "build": "npm run build --workspace server && npm run build --workspace admin",
-    "lint": "npm run lint --workspace server && npm run lint --workspace admin",
+    "dev:web": "npm run dev --workspace web",
+    "build": "npm run build --workspace server && npm run build --workspace admin && npm run build --workspace web",
+    "lint": "npm run lint --workspace server && npm run lint --workspace admin && npm run lint --workspace web",
     "db:generate": "npm run prisma:generate --workspace server",
     "db:validate": "npm run prisma:validate --workspace server",
     "db:migrate": "npm run prisma:migrate --workspace server",

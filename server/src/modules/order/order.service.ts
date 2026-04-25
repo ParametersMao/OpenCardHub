@@ -27,6 +27,21 @@ export class OrderService {
         throw new BadRequestException('Product is not available for storefront sale.');
       }
 
+      const siteProduct = input.siteId
+        ? await tx.siteProduct.findUnique({
+            where: {
+              siteId_productId: {
+                siteId: BigInt(input.siteId),
+                productId,
+              },
+            },
+          })
+        : undefined;
+
+      if (siteProduct && !siteProduct.isVisible) {
+        throw new BadRequestException('Product is hidden on this storefront.');
+      }
+
       const availableCards = await tx.$queryRaw<Array<{ id: bigint }>>`
         SELECT id
         FROM product_cards
@@ -41,7 +56,13 @@ export class OrderService {
         throw new BadRequestException('Insufficient card inventory.');
       }
 
-      const unitPrice = product.salePrice;
+      const unitPrice =
+        siteProduct?.customPrice &&
+        siteProduct.customPrice.toNumber() >= product.minSalePrice.toNumber()
+          ? siteProduct.customPrice
+          : siteProduct?.customPrice
+            ? product.minSalePrice
+            : product.salePrice;
       const totalAmount = unitPrice.mul(quantity);
       const costAmount = product.costPrice.mul(quantity);
       const platformProfit = totalAmount.minus(costAmount);

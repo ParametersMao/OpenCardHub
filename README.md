@@ -91,6 +91,12 @@ Start admin frontend:
 npm run dev:admin
 ```
 
+Start storefront frontend:
+
+```bash
+npm run dev:web
+```
+
 Useful checks:
 
 ```bash
@@ -102,6 +108,7 @@ Initial local endpoints:
 
 - Backend health: `http://localhost:3000/api/health`
 - Admin frontend: `http://localhost:5173`
+- Storefront frontend: `http://localhost:5174`
 
 Initial API surfaces:
 
@@ -141,6 +148,7 @@ Initial API surfaces:
 - `POST /api/sites/domains`
 - `GET /api/sites/resolve`
 - `GET /api/storefront`
+- `POST /api/storefront/orders`
 
 MySQL note:
 
