@@ -286,13 +286,38 @@ label {
 }
 
 input,
-select {
+select,
+textarea {
   width: 100%;
-  min-height: 42px;
   padding: 0 12px;
   color: #18211f;
   border: 1px solid rgba(24, 33, 31, 0.16);
   background: rgba(255, 255, 255, 0.72);
+}
+
+input,
+select {
+  min-height: 42px;
+}
+
+textarea {
+  min-height: 220px;
+  padding-top: 12px;
+  resize: vertical;
+}
+
+.form-grid.single {
+  grid-template-columns: 1fr;
+}
+
+.stock-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.empty-text {
+  color: #64706b;
 }
 
 table {

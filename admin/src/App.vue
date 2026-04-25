@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 
-type ViewKey = 'overview' | 'levels' | 'users' | 'catalog' | 'sites';
+type ViewKey =
+  | 'overview'
+  | 'levels'
+  | 'users'
+  | 'catalog'
+  | 'inventory'
+  | 'sites';
 
 interface Capability {
   id?: string;
@@ -58,11 +64,17 @@ interface User {
   createdAt: string;
 }
 
+interface StockSnapshot {
+  productId: string;
+  counts: Record<string, number>;
+}
+
 const navItems: Array<{ key: ViewKey; label: string }> = [
   { key: 'overview', label: '总览' },
   { key: 'levels', label: '等级能力' },
   { key: 'users', label: '用户' },
   { key: 'catalog', label: '商品' },
+  { key: 'inventory', label: '库存' },
   { key: 'sites', label: '分站' },
 ];
 
@@ -74,6 +86,7 @@ const categories = ref<Category[]>([]);
 const products = ref<Product[]>([]);
 const sites = ref<Site[]>([]);
 const users = ref<User[]>([]);
+const stockSnapshots = ref<Record<string, StockSnapshot>>({});
 
 const userForm = ref({
   username: '',
@@ -88,6 +101,10 @@ const productForm = ref({
   defaultWholesalePrice: 0,
   salePrice: 0,
   minSalePrice: 0,
+});
+const inventoryForm = ref({
+  productId: '',
+  cardsText: '',
 });
 const siteForm = ref({
   ownerUserId: '',
@@ -217,6 +234,39 @@ async function createProduct() {
     minSalePrice: 0,
   };
   await loadAll();
+}
+
+async function importCards() {
+  const cards = inventoryForm.value.cardsText
+    .split('\n')
+    .map((card) => card.trim())
+    .filter(Boolean);
+
+  if (!inventoryForm.value.productId || cards.length === 0) {
+    message.value = '请选择商品并输入卡密，一行一条';
+    return;
+  }
+
+  await request('/api/inventory/cards/import', {
+    method: 'POST',
+    body: JSON.stringify({
+      productId: inventoryForm.value.productId,
+      cards,
+    }),
+  });
+  inventoryForm.value.cardsText = '';
+  await refreshStock(inventoryForm.value.productId);
+  await loadAll();
+}
+
+async function refreshStock(productId: string) {
+  if (!productId) {
+    return;
+  }
+
+  stockSnapshots.value[productId] = await request<StockSnapshot>(
+    `/api/inventory/products/${productId}/stock`,
+  );
 }
 
 async function createSite() {
@@ -647,6 +697,85 @@ onMounted(() => {
               </tr>
             </tbody>
           </table>
+        </section>
+      </section>
+
+      <section
+        v-if="activeView === 'inventory'"
+        class="view-stack two-column"
+      >
+        <section class="panel">
+          <div class="panel-heading">
+            <h2>导入卡密</h2>
+          </div>
+          <form
+            class="form-grid single"
+            @submit.prevent="importCards"
+          >
+            <label>
+              商品
+              <select
+                v-model="inventoryForm.productId"
+                @change="refreshStock(inventoryForm.productId)"
+              >
+                <option value="">
+                  请选择
+                </option>
+                <option
+                  v-for="product in products"
+                  :key="product.id"
+                  :value="product.id"
+                >
+                  {{ product.name }} / 库存 {{ product.stockCount }}
+                </option>
+              </select>
+            </label>
+            <label>
+              卡密内容
+              <textarea
+                v-model="inventoryForm.cardsText"
+                placeholder="一行一条卡密"
+              />
+            </label>
+            <button
+              class="solid-button"
+              type="submit"
+            >
+              导入卡密
+            </button>
+          </form>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <h2>库存状态</h2>
+            <button
+              class="ghost-button"
+              type="button"
+              @click="refreshStock(inventoryForm.productId)"
+            >
+              查看库存
+            </button>
+          </div>
+          <div
+            v-if="inventoryForm.productId && stockSnapshots[inventoryForm.productId]"
+            class="stock-grid"
+          >
+            <article
+              v-for="(count, status) in stockSnapshots[inventoryForm.productId].counts"
+              :key="status"
+              class="metric-card"
+            >
+              <span>{{ status }}</span>
+              <strong>{{ count }}</strong>
+            </article>
+          </div>
+          <p
+            v-else
+            class="empty-text"
+          >
+            选择商品后查看库存状态。
+          </p>
         </section>
       </section>
     </main>
