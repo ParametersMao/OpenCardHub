@@ -25,3 +25,19 @@ export interface CapabilityCheckResult {
   key: CapabilityKey;
   limitValue?: number;
 }
+
+export interface PersistedCapability {
+  id: string;
+  key: string;
+  enabled: boolean;
+  limitValue?: number;
+  config?: Record<string, unknown>;
+}
+
+export interface PersistedLevelTemplate {
+  id: string;
+  level: LevelCode;
+  name: string;
+  description?: string;
+  capabilities: PersistedCapability[];
+}

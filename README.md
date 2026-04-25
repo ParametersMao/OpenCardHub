@@ -71,6 +71,14 @@ Start infrastructure:
 docker compose up -d
 ```
 
+Prepare database:
+
+```bash
+npm run db:generate
+npm run db:migrate
+npm run db:seed
+```
+
 Start backend API:
 
 ```bash

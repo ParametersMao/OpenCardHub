@@ -1,5 +1,9 @@
-import { Controller, Get, Param } from '@nestjs/common';
-import { CAPABILITY_KEYS, type CapabilityKey, type LevelCode } from './capability.constants';
+import { Controller, Get, Param, Post } from '@nestjs/common';
+import {
+  CAPABILITY_KEYS,
+  type CapabilityKey,
+  type LevelCode,
+} from './capability.constants';
 import { CapabilityService } from './capability.service';
 
 @Controller('capabilities')
@@ -9,6 +13,16 @@ export class CapabilityController {
   @Get('levels')
   getLevels() {
     return this.capabilityService.listLevelTemplates();
+  }
+
+  @Get('levels/persisted')
+  getPersistedLevels() {
+    return this.capabilityService.listPersistedLevelTemplates();
+  }
+
+  @Post('levels/bootstrap')
+  bootstrapLevels() {
+    return this.capabilityService.bootstrapDefaultLevels();
   }
 
   @Get('levels/:level/:capability')
