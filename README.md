@@ -116,6 +116,15 @@ Initial API surfaces:
 - `POST /api/catalog/categories`
 - `GET /api/catalog/products`
 - `POST /api/catalog/products`
+- `POST /api/inventory/cards/import`
+- `GET /api/inventory/products/:productId/cards`
+- `GET /api/inventory/products/:productId/stock`
+- `POST /api/inventory/cards/lock`
+
+MySQL note:
+
+Prisma 6 does not support MySQL users that authenticate with `sha256_password`.
+Use `mysql_native_password` or `caching_sha2_password` for the `DATABASE_URL` user.
 
 ## Repository Status
 

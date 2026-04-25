@@ -6,6 +6,7 @@ import { CatalogModule } from './modules/catalog/catalog.module';
 import { ConfigCenterModule } from './modules/config-center/config-center.module';
 import { DatabaseModule } from './modules/database/database.module';
 import { HealthModule } from './modules/health/health.module';
+import { InventoryModule } from './modules/inventory/inventory.module';
 import { PricingModule } from './modules/pricing/pricing.module';
 
 @Module({
@@ -18,6 +19,7 @@ import { PricingModule } from './modules/pricing/pricing.module';
     ConfigCenterModule,
     CapabilityModule,
     CatalogModule,
+    InventoryModule,
     PricingModule,
   ],
   controllers: [AppController],
