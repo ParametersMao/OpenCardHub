@@ -85,6 +85,7 @@ const message = ref('');
 const accessToken = ref(localStorage.getItem('opencardhub_token') ?? '');
 const currentUser = ref<User | null>(null);
 const levels = ref<Level[]>([]);
+const capabilityKeys = ref<string[]>([]);
 const categories = ref<Category[]>([]);
 const products = ref<Product[]>([]);
 const sites = ref<Site[]>([]);
@@ -193,10 +194,19 @@ async function loadAll() {
   message.value = '';
 
   try {
-    const [me, persistedLevels, userList, categoryList, productList, siteList] =
+    const [
+      me,
+      persistedLevels,
+      keys,
+      userList,
+      categoryList,
+      productList,
+      siteList,
+    ] =
       await Promise.all([
         request<User>('/api/auth/me'),
         request<Level[]>('/api/capabilities/levels/persisted'),
+        request<string[]>('/api/capabilities/keys'),
         request<User[]>('/api/users'),
         request<Category[]>('/api/catalog/categories'),
         request<Product[]>('/api/catalog/products'),
@@ -205,6 +215,7 @@ async function loadAll() {
 
     currentUser.value = me;
     levels.value = persistedLevels;
+    capabilityKeys.value = keys;
     users.value = userList;
     categories.value = categoryList;
     products.value = productList;
@@ -232,6 +243,31 @@ async function bootstrapLevels() {
   } finally {
     loading.value = false;
   }
+}
+
+function getLevelCapability(level: Level, key: string) {
+  return level.capabilities.find((capability) => capability.key === key);
+}
+
+async function updateLevelCapability(
+  level: Level,
+  key: string,
+  enabled: boolean,
+  limitValue?: number,
+) {
+  const updatedLevel = await request<Level>(
+    `/api/capabilities/levels/${level.level}/${key}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({
+        enabled,
+        limitValue,
+      }),
+    },
+  );
+  levels.value = levels.value.map((item) =>
+    item.level === updatedLevel.level ? updatedLevel : item,
+  );
 }
 
 async function createUser() {
@@ -517,6 +553,73 @@ onMounted(() => {
               </div>
             </article>
           </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <h2>能力开关</h2>
+            <span>直接控制各等级特权</span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>能力项</th>
+                <th
+                  v-for="level in levels"
+                  :key="level.level"
+                >
+                  {{ level.level }}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="key in capabilityKeys"
+                :key="key"
+              >
+                <td>
+                  <code>{{ key }}</code>
+                </td>
+                <td
+                  v-for="level in levels"
+                  :key="`${level.level}-${key}`"
+                >
+                  <label class="inline-toggle">
+                    <input
+                      :checked="Boolean(getLevelCapability(level, key)?.enabled)"
+                      type="checkbox"
+                      @change="
+                        updateLevelCapability(
+                          level,
+                          key,
+                          ($event.target as HTMLInputElement).checked,
+                          getLevelCapability(level, key)?.limitValue,
+                        )
+                      "
+                    >
+                    启用
+                  </label>
+                  <input
+                    class="limit-input"
+                    :value="getLevelCapability(level, key)?.limitValue ?? ''"
+                    placeholder="额度"
+                    type="number"
+                    min="0"
+                    @change="
+                      updateLevelCapability(
+                        level,
+                        key,
+                        Boolean(getLevelCapability(level, key)?.enabled),
+                        ($event.target as HTMLInputElement).value
+                          ? Number(($event.target as HTMLInputElement).value)
+                          : undefined,
+                      )
+                    "
+                  >
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </section>
       </section>
 

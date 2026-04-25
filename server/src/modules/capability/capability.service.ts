@@ -8,6 +8,7 @@ import type {
   PersistedLevelTemplate,
 } from './capability.types';
 import { PrismaService } from '../database/prisma.service';
+import type { UpdateLevelCapabilityDto } from './dto/update-level-capability.dto';
 
 @Injectable()
 export class CapabilityService {
@@ -122,6 +123,69 @@ export class CapabilityService {
       level,
       key,
       limitValue: capability?.limitValue,
+    };
+  }
+
+  async updateLevelCapability(
+    level: LevelCode,
+    key: CapabilityKey,
+    input: UpdateLevelCapabilityDto,
+  ): Promise<PersistedLevelTemplate> {
+    const levelRecord = await this.prisma.agentLevel.upsert({
+      where: {
+        code: level,
+      },
+      create: {
+        code: level,
+        name: level,
+      },
+      update: {},
+    });
+
+    await this.prisma.levelCapability.upsert({
+      where: {
+        levelId_capabilityKey: {
+          levelId: levelRecord.id,
+          capabilityKey: key,
+        },
+      },
+      create: {
+        levelId: levelRecord.id,
+        capabilityKey: key,
+        enabled: input.enabled,
+        limitValue: input.limitValue,
+      },
+      update: {
+        enabled: input.enabled,
+        limitValue: input.limitValue,
+      },
+    });
+
+    const [updatedLevel] = await this.prisma.agentLevel.findMany({
+      where: {
+        id: levelRecord.id,
+      },
+      include: {
+        capabilities: {
+          orderBy: {
+            capabilityKey: 'asc',
+          },
+        },
+      },
+    });
+
+    return {
+      id: updatedLevel.id.toString(),
+      level: updatedLevel.code,
+      name: updatedLevel.name,
+      description: updatedLevel.description ?? undefined,
+      capabilities: updatedLevel.capabilities.map((capability) => ({
+        id: capability.id.toString(),
+        key: capability.capabilityKey,
+        enabled: capability.enabled,
+        limitValue: capability.limitValue ?? undefined,
+        config: this.asRecord(capability.configJson),
+      })),
     };
   }
 

@@ -111,6 +111,7 @@ Initial API surfaces:
 - `GET /api/capabilities/levels`
 - `POST /api/capabilities/levels/bootstrap`
 - `GET /api/capabilities/levels/persisted`
+- `PUT /api/capabilities/levels/:level/:capability`
 - `GET /api/config/settings`
 - `PUT /api/config/settings`
 - `POST /api/config/resolve`

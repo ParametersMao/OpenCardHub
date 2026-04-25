@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, UseGuards } from '@nestjs/common';
 import { AdminGuard } from '../auth/admin.guard';
 import {
   CAPABILITY_KEYS,
@@ -6,6 +6,7 @@ import {
   type LevelCode,
 } from './capability.constants';
 import { CapabilityService } from './capability.service';
+import { UpdateLevelCapabilityDto } from './dto/update-level-capability.dto';
 
 @UseGuards(AdminGuard)
 @Controller('capabilities')
@@ -33,6 +34,19 @@ export class CapabilityController {
     @Param('capability') capability: CapabilityKey,
   ) {
     return this.capabilityService.checkLevelCapability(level, capability);
+  }
+
+  @Put('levels/:level/:capability')
+  updateCapability(
+    @Param('level') level: LevelCode,
+    @Param('capability') capability: CapabilityKey,
+    @Body() input: UpdateLevelCapabilityDto,
+  ) {
+    return this.capabilityService.updateLevelCapability(
+      level,
+      capability,
+      input,
+    );
   }
 
   @Get('keys')
