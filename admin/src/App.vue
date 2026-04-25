@@ -289,6 +289,14 @@ async function createUser() {
   await loadAll();
 }
 
+async function updateUserStatus(user: User, status: 'active' | 'disabled') {
+  await request(`/api/users/${user.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  });
+  await loadAll();
+}
+
 async function createCategory() {
   if (!categoryForm.value.name.trim()) {
     message.value = '请填写分类名称';
@@ -300,6 +308,30 @@ async function createCategory() {
     body: JSON.stringify(categoryForm.value),
   });
   categoryForm.value.name = '';
+  await loadAll();
+}
+
+async function updateProductStatus(
+  product: Product,
+  status: 'active' | 'hidden' | 'disabled',
+) {
+  await request(`/api/catalog/products/${product.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  });
+  await loadAll();
+}
+
+async function updateProductPrice(product: Product, salePrice: number) {
+  if (Number.isNaN(salePrice) || salePrice < 0) {
+    message.value = '售价必须是大于等于 0 的数字';
+    return;
+  }
+
+  await request(`/api/catalog/products/${product.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ salePrice }),
+  });
   await loadAll();
 }
 
@@ -321,6 +353,17 @@ async function createProduct() {
     salePrice: 0,
     minSalePrice: 0,
   };
+  await loadAll();
+}
+
+async function updateSiteStatus(
+  site: Site,
+  status: 'active' | 'suspended' | 'banned',
+) {
+  await request(`/api/sites/${site.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  });
   await loadAll();
 }
 
@@ -734,6 +777,7 @@ onMounted(() => {
                 <th>进货价</th>
                 <th>库存</th>
                 <th>状态</th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody>
@@ -743,10 +787,45 @@ onMounted(() => {
               >
                 <td>{{ product.name }}</td>
                 <td>{{ product.category?.name ?? '-' }}</td>
-                <td>{{ product.salePrice }}</td>
+                <td>
+                  <input
+                    class="table-input"
+                    :value="product.salePrice"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    @change="
+                      updateProductPrice(
+                        product,
+                        Number(($event.target as HTMLInputElement).value),
+                      )
+                    "
+                  >
+                </td>
                 <td>{{ product.defaultWholesalePrice }}</td>
                 <td>{{ product.stockCount }}</td>
                 <td>{{ product.status }}</td>
+                <td>
+                  <button
+                    class="table-button"
+                    type="button"
+                    @click="
+                      updateProductStatus(
+                        product,
+                        product.status === 'active' ? 'hidden' : 'active',
+                      )
+                    "
+                  >
+                    {{ product.status === 'active' ? '隐藏' : '上架' }}
+                  </button>
+                  <button
+                    class="table-button danger"
+                    type="button"
+                    @click="updateProductStatus(product, 'disabled')"
+                  >
+                    禁用
+                  </button>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -827,6 +906,7 @@ onMounted(() => {
                 <th>等级</th>
                 <th>余额</th>
                 <th>状态</th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody>
@@ -840,6 +920,20 @@ onMounted(() => {
                 <td>{{ user.levelCode }}</td>
                 <td>{{ user.balance }}</td>
                 <td>{{ user.status }}</td>
+                <td>
+                  <button
+                    class="table-button"
+                    type="button"
+                    @click="
+                      updateUserStatus(
+                        user,
+                        user.status === 'active' ? 'disabled' : 'active',
+                      )
+                    "
+                  >
+                    {{ user.status === 'active' ? '禁用' : '启用' }}
+                  </button>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -905,6 +999,7 @@ onMounted(() => {
                 <th>代理用户</th>
                 <th>域名</th>
                 <th>状态</th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody>
@@ -924,6 +1019,27 @@ onMounted(() => {
                   </span>
                 </td>
                 <td>{{ site.status }}</td>
+                <td>
+                  <button
+                    class="table-button"
+                    type="button"
+                    @click="
+                      updateSiteStatus(
+                        site,
+                        site.status === 'active' ? 'suspended' : 'active',
+                      )
+                    "
+                  >
+                    {{ site.status === 'active' ? '暂停' : '启用' }}
+                  </button>
+                  <button
+                    class="table-button danger"
+                    type="button"
+                    @click="updateSiteStatus(site, 'banned')"
+                  >
+                    封禁
+                  </button>
+                </td>
               </tr>
             </tbody>
           </table>

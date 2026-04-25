@@ -3,6 +3,8 @@ import type { Category, Product, SiteProduct } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import type { CreateCategoryDto } from './dto/create-category.dto';
 import type { CreateProductDto } from './dto/create-product.dto';
+import type { UpdateCategoryDto } from './dto/update-category.dto';
+import type { UpdateProductDto } from './dto/update-product.dto';
 import type { UpsertSiteProductDto } from './dto/upsert-site-product.dto';
 
 @Injectable()
@@ -26,6 +28,22 @@ export class CatalogService {
     });
 
     return categories.map((category) => this.mapCategory(category));
+  }
+
+  async updateCategory(id: string, input: UpdateCategoryDto) {
+    const category = await this.prisma.category.update({
+      where: {
+        id: BigInt(id),
+      },
+      data: {
+        parentId: input.parentId ? BigInt(input.parentId) : undefined,
+        name: input.name,
+        sortOrder: input.sortOrder,
+        status: input.status,
+      },
+    });
+
+    return this.mapCategory(category);
   }
 
   async createProduct(input: CreateProductDto) {
@@ -62,6 +80,35 @@ export class CatalogService {
     });
 
     return products.map((product) => this.mapProduct(product));
+  }
+
+  async updateProduct(id: string, input: UpdateProductDto) {
+    const product = await this.prisma.product.update({
+      where: {
+        id: BigInt(id),
+      },
+      data: {
+        categoryId: input.categoryId ? BigInt(input.categoryId) : undefined,
+        name: input.name,
+        cover: input.cover,
+        description: input.description,
+        costPrice: input.costPrice,
+        defaultWholesalePrice: input.defaultWholesalePrice,
+        salePrice: input.salePrice,
+        minSalePrice: input.minSalePrice,
+        allowSiteSale: input.allowSiteSale,
+        allowAgentEditPrice: input.allowAgentEditPrice,
+        allowAgentEditName: input.allowAgentEditName,
+        allowAgentEditDescription: input.allowAgentEditDescription,
+        sortOrder: input.sortOrder,
+        status: input.status,
+      },
+      include: {
+        category: true,
+      },
+    });
+
+    return this.mapProduct(product);
   }
 
   async upsertSiteProduct(input: UpsertSiteProductDto) {

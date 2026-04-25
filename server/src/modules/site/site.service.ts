@@ -3,6 +3,7 @@ import type { Domain, Site } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import type { BindDomainDto } from './dto/bind-domain.dto';
 import type { CreateSiteDto } from './dto/create-site.dto';
+import type { UpdateSiteDto } from './dto/update-site.dto';
 
 @Injectable()
 export class SiteService {
@@ -54,6 +55,28 @@ export class SiteService {
     });
 
     return sites.map((site) => this.mapSite(site));
+  }
+
+  async updateSite(id: string, input: UpdateSiteDto) {
+    const site = await this.prisma.site.update({
+      where: {
+        id: BigInt(id),
+      },
+      data: {
+        name: input.name,
+        logo: input.logo,
+        status: input.status,
+        seoTitle: input.seoTitle,
+        seoKeywords: input.seoKeywords,
+        seoDescription: input.seoDescription,
+        notice: input.notice,
+      },
+      include: {
+        domains: true,
+      },
+    });
+
+    return this.mapSite(site);
   }
 
   async bindDomain(input: BindDomainDto) {

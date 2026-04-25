@@ -365,6 +365,26 @@ textarea {
   max-width: 96px;
 }
 
+.table-input {
+  max-width: 110px;
+  min-height: 34px;
+}
+
+.table-button {
+  min-height: 32px;
+  margin-right: 6px;
+  padding: 0 10px;
+  color: #1c6b57;
+  border: 1px solid rgba(28, 107, 87, 0.22);
+  background: rgba(28, 107, 87, 0.08);
+}
+
+.table-button.danger {
+  color: #9b351f;
+  border-color: rgba(183, 71, 42, 0.22);
+  background: rgba(183, 71, 42, 0.08);
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

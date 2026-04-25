@@ -117,10 +117,13 @@ Initial API surfaces:
 - `POST /api/config/resolve`
 - `GET /api/users`
 - `POST /api/users`
+- `PATCH /api/users/:id`
 - `GET /api/catalog/categories`
 - `POST /api/catalog/categories`
+- `PATCH /api/catalog/categories/:id`
 - `GET /api/catalog/products`
 - `POST /api/catalog/products`
+- `PATCH /api/catalog/products/:id`
 - `GET /api/catalog/sites/:siteId/products`
 - `GET /api/catalog/sites/:siteId/overrides`
 - `POST /api/catalog/site-products`
@@ -134,6 +137,7 @@ Initial API surfaces:
 - `POST /api/payments/alipay/callback`
 - `GET /api/sites`
 - `POST /api/sites`
+- `PATCH /api/sites/:id`
 - `POST /api/sites/domains`
 - `GET /api/sites/resolve`
 - `GET /api/storefront`

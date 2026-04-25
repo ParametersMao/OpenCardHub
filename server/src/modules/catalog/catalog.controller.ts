@@ -1,8 +1,10 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { AdminGuard } from '../auth/admin.guard';
 import { CatalogService } from './catalog.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { CreateProductDto } from './dto/create-product.dto';
+import { UpdateCategoryDto } from './dto/update-category.dto';
+import { UpdateProductDto } from './dto/update-product.dto';
 import { UpsertSiteProductDto } from './dto/upsert-site-product.dto';
 
 @UseGuards(AdminGuard)
@@ -20,6 +22,14 @@ export class CatalogController {
     return this.catalogService.createCategory(input);
   }
 
+  @Patch('categories/:id')
+  updateCategory(
+    @Param('id') id: string,
+    @Body() input: UpdateCategoryDto,
+  ) {
+    return this.catalogService.updateCategory(id, input);
+  }
+
   @Get('products')
   listProducts() {
     return this.catalogService.listProducts();
@@ -28,6 +38,11 @@ export class CatalogController {
   @Post('products')
   createProduct(@Body() input: CreateProductDto) {
     return this.catalogService.createProduct(input);
+  }
+
+  @Patch('products/:id')
+  updateProduct(@Param('id') id: string, @Body() input: UpdateProductDto) {
+    return this.catalogService.updateProduct(id, input);
   }
 
   @Get('sites/:siteId/products')

@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common';
 import type { User } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import type { CreateUserDto } from './dto/create-user.dto';
+import type { UpdateUserDto } from './dto/update-user.dto';
 
 @Injectable()
 export class UserService {
@@ -33,6 +34,27 @@ export class UserService {
     return users.map((user) => this.mapUser(user));
   }
 
+  async updateUser(id: string, input: UpdateUserDto) {
+    const user = await this.prisma.user.update({
+      where: {
+        id: BigInt(id),
+      },
+      data: {
+        username: input.username,
+        passwordHash: input.password
+          ? this.hashPassword(input.password)
+          : undefined,
+        role: input.role,
+        levelCode: input.levelCode,
+        status: input.status,
+        mobile: input.mobile,
+        email: input.email,
+      },
+    });
+
+    return this.mapUser(user);
+  }
+
   async findByUsername(username: string) {
     return this.prisma.user.findUnique({
       where: {
@@ -60,6 +82,7 @@ export class UserService {
       status: user.status,
       balance: user.balance.toNumber(),
       createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
     };
   }
 }
