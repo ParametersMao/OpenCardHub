@@ -116,6 +116,9 @@ Initial API surfaces:
 - `POST /api/catalog/categories`
 - `GET /api/catalog/products`
 - `POST /api/catalog/products`
+- `GET /api/catalog/sites/:siteId/products`
+- `GET /api/catalog/sites/:siteId/overrides`
+- `POST /api/catalog/site-products`
 - `POST /api/inventory/cards/import`
 - `GET /api/inventory/products/:productId/cards`
 - `GET /api/inventory/products/:productId/stock`
