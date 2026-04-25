@@ -1,5 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import type { Category, Product, SiteProduct } from '@prisma/client';
+import type { AuthUser } from '../auth/auth.types';
+import { CAPABILITY_KEYS } from '../capability/capability.constants';
+import { CapabilityService } from '../capability/capability.service';
 import { PrismaService } from '../database/prisma.service';
 import type { CreateCategoryDto } from './dto/create-category.dto';
 import type { CreateProductDto } from './dto/create-product.dto';
@@ -9,7 +12,10 @@ import type { UpsertSiteProductDto } from './dto/upsert-site-product.dto';
 
 @Injectable()
 export class CatalogService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly capabilityService: CapabilityService,
+  ) {}
 
   async createCategory(input: CreateCategoryDto) {
     const category = await this.prisma.category.create({
@@ -73,6 +79,21 @@ export class CatalogService {
 
   async listProducts() {
     const products = await this.prisma.product.findMany({
+      orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+      include: {
+        category: true,
+      },
+    });
+
+    return products.map((product) => this.mapProduct(product));
+  }
+
+  async listAgentAvailableProducts() {
+    const products = await this.prisma.product.findMany({
+      where: {
+        status: 'active',
+        allowSiteSale: true,
+      },
       orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
       include: {
         category: true,
@@ -149,6 +170,27 @@ export class CatalogService {
     return this.mapSiteProduct(siteProduct);
   }
 
+  async upsertOwnedSiteProduct(user: AuthUser, input: UpsertSiteProductDto) {
+    if (user.role !== 'agent') {
+      throw new BadRequestException('Only agent users can configure storefront products.');
+    }
+
+    await this.assertSiteOwner(user.id, input.siteId);
+    const product = await this.prisma.product.findUnique({
+      where: {
+        id: BigInt(input.productId),
+      },
+    });
+
+    if (!product || product.status !== 'active' || !product.allowSiteSale) {
+      throw new BadRequestException('Product is not available for storefront sale.');
+    }
+
+    await this.assertProductOverrideAllowed(user, product, input);
+
+    return this.upsertSiteProduct(input);
+  }
+
   async listSiteProductOverrides(siteId: string) {
     const siteProducts = await this.prisma.siteProduct.findMany({
       where: {
@@ -165,6 +207,11 @@ export class CatalogService {
     });
 
     return siteProducts.map((siteProduct) => this.mapSiteProduct(siteProduct));
+  }
+
+  async listOwnedSiteProductOverrides(ownerUserId: string, siteId: string) {
+    await this.assertSiteOwner(ownerUserId, siteId);
+    return this.listSiteProductOverrides(siteId);
   }
 
   async listResolvedSiteProducts(siteId: string) {
@@ -192,6 +239,72 @@ export class CatalogService {
       })
       .filter((product) => product.isVisible)
       .sort((left, right) => left.sortOrder - right.sortOrder);
+  }
+
+  async listOwnedResolvedSiteProducts(ownerUserId: string, siteId: string) {
+    await this.assertSiteOwner(ownerUserId, siteId);
+    return this.listResolvedSiteProducts(siteId);
+  }
+
+  private async assertSiteOwner(ownerUserId: string, siteId: string) {
+    const site = await this.prisma.site.findFirst({
+      where: {
+        id: BigInt(siteId),
+        ownerUserId: BigInt(ownerUserId),
+      },
+    });
+
+    if (!site) {
+      throw new BadRequestException('Storefront not found for current user.');
+    }
+  }
+
+  private async assertProductOverrideAllowed(
+    user: AuthUser,
+    product: Product,
+    input: UpsertSiteProductDto,
+  ) {
+    if (input.customPrice !== undefined) {
+      const capability = await this.capabilityService.checkLevelCapability(
+        user.levelCode,
+        CAPABILITY_KEYS.productCustomPrice,
+      );
+
+      if (!capability.allowed || !product.allowAgentEditPrice) {
+        throw new BadRequestException('Current level cannot customize product price.');
+      }
+
+      if (input.customPrice < product.minSalePrice.toNumber()) {
+        throw new BadRequestException('Custom price cannot be lower than minimum sale price.');
+      }
+    }
+
+    if (input.customName !== undefined) {
+      const capability = await this.capabilityService.checkLevelCapability(
+        user.levelCode,
+        CAPABILITY_KEYS.productCustomName,
+      );
+
+      if (!capability.allowed || !product.allowAgentEditName) {
+        throw new BadRequestException('Current level cannot customize product name.');
+      }
+    }
+
+    if (
+      input.customDescription !== undefined ||
+      input.customCover !== undefined
+    ) {
+      const capability = await this.capabilityService.checkLevelCapability(
+        user.levelCode,
+        CAPABILITY_KEYS.productCustomDescription,
+      );
+
+      if (!capability.allowed || !product.allowAgentEditDescription) {
+        throw new BadRequestException(
+          'Current level cannot customize product description.',
+        );
+      }
+    }
   }
 
   private mapCategory(category: Category) {

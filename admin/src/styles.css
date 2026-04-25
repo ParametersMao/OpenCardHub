@@ -367,12 +367,75 @@ textarea {
   gap: 16px;
 }
 
+.product-config-block {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.sub-panel,
 .site-card {
   display: grid;
   gap: 16px;
   padding: 16px;
   border: 1px solid rgba(24, 33, 31, 0.12);
   background: rgba(255, 255, 255, 0.48);
+}
+
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.product-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(24, 33, 31, 0.1);
+  background: rgba(255, 252, 244, 0.64);
+}
+
+.product-card strong,
+.product-card span {
+  display: block;
+}
+
+.product-card span,
+.product-card p,
+.product-card dt {
+  color: #64706b;
+}
+
+.product-card p {
+  min-height: 44px;
+  margin: 0;
+  line-height: 1.55;
+}
+
+.product-card dl {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+}
+
+.product-card dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.product-card dd {
+  margin: 0;
+  font-weight: 800;
+}
+
+.override-note {
+  padding: 10px;
+  color: #1c6b57;
+  font-size: 13px;
+  font-weight: 800;
+  background: rgba(28, 107, 87, 0.08);
 }
 
 .site-card-head {
@@ -475,7 +538,8 @@ td {
   .metric-grid,
   .level-grid,
   .form-grid,
-  .form-grid.three {
+  .form-grid.three,
+  .product-grid {
     grid-template-columns: 1fr;
   }
 

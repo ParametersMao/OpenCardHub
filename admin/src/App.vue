@@ -37,11 +37,28 @@ interface Product {
   id: string;
   name: string;
   category?: Category;
+  description?: string;
   salePrice: number;
   minSalePrice: number;
   defaultWholesalePrice: number;
   stockCount: number;
+  allowAgentEditPrice?: boolean;
+  allowAgentEditName?: boolean;
+  allowAgentEditDescription?: boolean;
   status: string;
+}
+
+interface SiteProductOverride {
+  id?: string;
+  siteId: string;
+  productId: string;
+  customName?: string;
+  customDescription?: string;
+  customCover?: string;
+  customPrice?: number;
+  isVisible: boolean;
+  sortOrder: number;
+  product?: Product;
 }
 
 interface SiteDomain {
@@ -103,6 +120,8 @@ const categories = ref<Category[]>([]);
 const products = ref<Product[]>([]);
 const sites = ref<Site[]>([]);
 const agentSites = ref<Site[]>([]);
+const agentProducts = ref<Product[]>([]);
+const agentSiteOverrides = ref<Record<string, SiteProductOverride[]>>({});
 const users = ref<User[]>([]);
 const stockSnapshots = ref<Record<string, StockSnapshot>>({});
 
@@ -142,6 +161,16 @@ const myDomainForm = ref({
   siteId: '',
   domain: '',
   type: 'system_sub',
+});
+const myProductForm = ref({
+  siteId: '',
+  productId: '',
+  customName: '',
+  customDescription: '',
+  customCover: '',
+  customPrice: undefined as number | undefined,
+  isVisible: true,
+  sortOrder: 0,
 });
 const editingSites = ref<Record<string, Partial<Site>>>({});
 
@@ -280,7 +309,13 @@ async function loadAdminData() {
 }
 
 async function loadAgentData() {
-  agentSites.value = await request<Site[]>('/api/agent/sites');
+  const [mySites, availableProducts] = await Promise.all([
+    request<Site[]>('/api/agent/sites'),
+    request<Product[]>('/api/agent/catalog/products'),
+  ]);
+
+  agentSites.value = mySites;
+  agentProducts.value = availableProducts;
   editingSites.value = Object.fromEntries(
     agentSites.value.map((site) => [
       site.id,
@@ -294,6 +329,16 @@ async function loadAgentData() {
       },
     ]),
   );
+
+  if (!myProductForm.value.siteId && agentSites.value[0]) {
+    myProductForm.value.siteId = agentSites.value[0].id;
+  }
+
+  if (!myProductForm.value.productId && agentProducts.value[0]) {
+    myProductForm.value.productId = agentProducts.value[0].id;
+  }
+
+  await refreshAgentSiteOverrides();
 }
 
 async function bootstrapLevels() {
@@ -531,6 +576,56 @@ async function bindMyDomain() {
   myDomainForm.value.domain = '';
   message.value = '域名已提交';
   await loadAgentData();
+}
+
+async function refreshAgentSiteOverrides() {
+  const entries = await Promise.all(
+    agentSites.value.map(async (site) => [
+      site.id,
+      await request<SiteProductOverride[]>(
+        `/api/agent/catalog/sites/${site.id}/overrides`,
+      ),
+    ]),
+  );
+
+  agentSiteOverrides.value = Object.fromEntries(entries);
+}
+
+async function upsertMySiteProduct() {
+  if (!myProductForm.value.siteId || !myProductForm.value.productId) {
+    message.value = '请选择分站和商品';
+    return;
+  }
+
+  await request('/api/agent/catalog/site-products', {
+    method: 'POST',
+    body: JSON.stringify({
+      ...myProductForm.value,
+      customName: myProductForm.value.customName || undefined,
+      customDescription: myProductForm.value.customDescription || undefined,
+      customCover: myProductForm.value.customCover || undefined,
+      customPrice:
+        myProductForm.value.customPrice === undefined ||
+        Number.isNaN(myProductForm.value.customPrice)
+          ? undefined
+          : myProductForm.value.customPrice,
+    }),
+  });
+
+  message.value = '分站商品配置已保存';
+  myProductForm.value.customName = '';
+  myProductForm.value.customDescription = '';
+  myProductForm.value.customCover = '';
+  myProductForm.value.customPrice = undefined;
+  myProductForm.value.isVisible = true;
+  myProductForm.value.sortOrder = 0;
+  await refreshAgentSiteOverrides();
+}
+
+function getProductOverride(siteId: string, productId: string) {
+  return agentSiteOverrides.value[siteId]?.find(
+    (override) => override.productId === productId,
+  );
 }
 
 function storefrontPreviewUrl(site: Site) {
@@ -1341,6 +1436,160 @@ onMounted(() => {
             <h2>我的分站</h2>
             <span>{{ agentSites.length }} 个分站</span>
           </div>
+          <div class="product-config-block">
+            <section class="sub-panel">
+              <div class="panel-heading">
+                <h2>分站商品配置</h2>
+                <span>自定义项会受等级能力和商品规则共同限制</span>
+              </div>
+              <form
+                class="form-grid three"
+                @submit.prevent="upsertMySiteProduct"
+              >
+                <label>
+                  选择分站
+                  <select v-model="myProductForm.siteId">
+                    <option value="">
+                      请选择
+                    </option>
+                    <option
+                      v-for="site in agentSites"
+                      :key="site.id"
+                      :value="site.id"
+                    >
+                      {{ site.name }}
+                    </option>
+                  </select>
+                </label>
+                <label>
+                  选择商品
+                  <select v-model="myProductForm.productId">
+                    <option value="">
+                      请选择
+                    </option>
+                    <option
+                      v-for="product in agentProducts"
+                      :key="product.id"
+                      :value="product.id"
+                    >
+                      {{ product.name }} / 最低￥{{ product.minSalePrice }}
+                    </option>
+                  </select>
+                </label>
+                <label>
+                  展示状态
+                  <select v-model="myProductForm.isVisible">
+                    <option :value="true">
+                      展示
+                    </option>
+                    <option :value="false">
+                      隐藏
+                    </option>
+                  </select>
+                </label>
+                <label>
+                  自定义名称
+                  <input
+                    v-model="myProductForm.customName"
+                    placeholder="留空使用主站商品名称"
+                  >
+                </label>
+                <label>
+                  自定义售价
+                  <input
+                    v-model.number="myProductForm.customPrice"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="留空使用主站售价"
+                  >
+                </label>
+                <label>
+                  排序
+                  <input
+                    v-model.number="myProductForm.sortOrder"
+                    type="number"
+                    step="1"
+                  >
+                </label>
+                <label class="wide">
+                  自定义封面
+                  <input
+                    v-model="myProductForm.customCover"
+                    placeholder="图片 URL，留空使用主站封面"
+                  >
+                </label>
+                <label class="wide">
+                  自定义描述
+                  <textarea
+                    v-model="myProductForm.customDescription"
+                    placeholder="留空使用主站商品描述"
+                  />
+                </label>
+                <button
+                  class="solid-button"
+                  type="submit"
+                >
+                  保存商品配置
+                </button>
+              </form>
+            </section>
+
+            <section class="sub-panel">
+              <div class="panel-heading">
+                <h2>我的货架</h2>
+                <span>{{ agentProducts.length }} 个可分销商品</span>
+              </div>
+              <div class="product-grid">
+                <article
+                  v-for="product in agentProducts"
+                  :key="product.id"
+                  class="product-card"
+                >
+                  <div>
+                    <strong>{{ product.name }}</strong>
+                    <span>{{ product.category?.name ?? '未分类' }}</span>
+                  </div>
+                  <p>{{ product.description ?? '暂无描述' }}</p>
+                  <dl>
+                    <div>
+                      <dt>主站售价</dt>
+                      <dd>￥{{ product.salePrice }}</dd>
+                    </div>
+                    <div>
+                      <dt>最低售价</dt>
+                      <dd>￥{{ product.minSalePrice }}</dd>
+                    </div>
+                    <div>
+                      <dt>库存</dt>
+                      <dd>{{ product.stockCount }}</dd>
+                    </div>
+                  </dl>
+                  <div class="capability-list">
+                    <span :class="{ enabled: product.allowAgentEditName }">
+                      改名 {{ product.allowAgentEditName ? '允许' : '禁止' }}
+                    </span>
+                    <span :class="{ enabled: product.allowAgentEditPrice }">
+                      改价 {{ product.allowAgentEditPrice ? '允许' : '禁止' }}
+                    </span>
+                    <span :class="{ enabled: product.allowAgentEditDescription }">
+                      改描述 {{ product.allowAgentEditDescription ? '允许' : '禁止' }}
+                    </span>
+                  </div>
+                  <div
+                    v-if="myProductForm.siteId && getProductOverride(myProductForm.siteId, product.id)"
+                    class="override-note"
+                  >
+                    已配置：
+                    {{ getProductOverride(myProductForm.siteId, product.id)?.customName ?? product.name }}
+                    /
+                    ￥{{ getProductOverride(myProductForm.siteId, product.id)?.customPrice ?? product.salePrice }}
+                  </div>
+                </article>
+              </div>
+            </section>
+          </div>
+
           <div class="site-card-grid">
             <article
               v-for="site in agentSites"
