@@ -104,6 +104,37 @@ export class SiteService {
     };
   }
 
+  async resolveSiteEntityByHost(host: string) {
+    const normalizedHost = host.split(':')[0]?.toLowerCase();
+
+    if (!normalizedHost) {
+      throw new BadRequestException('Host is required.');
+    }
+
+    const domain = await this.prisma.domain.findUnique({
+      where: {
+        domain: normalizedHost,
+      },
+      include: {
+        site: true,
+      },
+    });
+
+    if (!domain || domain.status !== 'active' || !domain.site) {
+      throw new BadRequestException('Site not found for host.');
+    }
+
+    if (domain.site.status !== 'active') {
+      throw new BadRequestException('Site is not active.');
+    }
+
+    return {
+      host: normalizedHost,
+      domain,
+      site: domain.site,
+    };
+  }
+
   private mapSite(site: Site & { domains?: Domain[] }) {
     return {
       id: site.id.toString(),

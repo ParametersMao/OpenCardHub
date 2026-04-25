@@ -11,6 +11,7 @@ import { OrderModule } from './modules/order/order.module';
 import { PaymentModule } from './modules/payment/payment.module';
 import { PricingModule } from './modules/pricing/pricing.module';
 import { SiteModule } from './modules/site/site.module';
+import { StorefrontModule } from './modules/storefront/storefront.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { SiteModule } from './modules/site/site.module';
     PaymentModule,
     PricingModule,
     SiteModule,
+    StorefrontModule,
   ],
   controllers: [AppController],
 })

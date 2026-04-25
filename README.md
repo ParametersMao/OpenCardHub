@@ -131,6 +131,7 @@ Initial API surfaces:
 - `POST /api/sites`
 - `POST /api/sites/domains`
 - `GET /api/sites/resolve`
+- `GET /api/storefront`
 
 MySQL note:
 
