@@ -8,5 +8,6 @@ import { AlipayProvider } from './providers/alipay.provider';
   imports: [OrderModule],
   controllers: [PaymentController],
   providers: [PaymentService, AlipayProvider],
+  exports: [PaymentService],
 })
 export class PaymentModule {}

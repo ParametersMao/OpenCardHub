@@ -2,8 +2,10 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { Decimal } from '@prisma/client/runtime/library';
 import { CatalogService } from '../catalog/catalog.service';
 import { OrderService } from '../order/order.service';
+import { PaymentService } from '../payment/payment.service';
 import { PrismaService } from '../database/prisma.service';
 import { SiteService } from '../site/site.service';
+import type { CreateStorefrontPaymentDto } from './dto/create-storefront-payment.dto';
 import type { CreateStorefrontOrderDto } from './dto/create-storefront-order.dto';
 import type { MockPayOrderDto } from './dto/mock-pay-order.dto';
 import type { QueryStorefrontOrderDto } from './dto/query-storefront-order.dto';
@@ -15,6 +17,7 @@ export class StorefrontService {
     private readonly siteService: SiteService,
     private readonly catalogService: CatalogService,
     private readonly orderService: OrderService,
+    private readonly paymentService: PaymentService,
   ) {}
 
   async getStorefrontByHost(host: string) {
@@ -57,6 +60,13 @@ export class StorefrontService {
 
   async queryOrder(input: QueryStorefrontOrderDto) {
     return this.orderService.getPublicOrder(input.orderNo, input.buyerContact);
+  }
+
+  async createPayment(input: CreateStorefrontPaymentDto) {
+    return this.paymentService.createAlipayPaymentByOrderNo(
+      input.orderNo,
+      input.buyerContact,
+    );
   }
 
   async mockPayOrder(input: MockPayOrderDto) {

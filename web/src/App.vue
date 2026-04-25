@@ -39,6 +39,13 @@ interface PublicOrder {
   }>;
 }
 
+interface PaymentIntent {
+  provider: string;
+  paymentNo: string;
+  payUrl?: string;
+  amount: number;
+}
+
 const params = new URLSearchParams(location.search);
 const host = ref(params.get('host') ?? location.host);
 const storefront = ref<Storefront | null>(null);
@@ -48,6 +55,7 @@ const buyerContact = ref('');
 const selectedProductId = ref('');
 const quantity = ref(1);
 const latestOrder = ref<PublicOrder | null>(null);
+const latestPayment = ref<PaymentIntent | null>(null);
 const queryForm = ref({
   orderNo: '',
   buyerContact: '',
@@ -119,6 +127,7 @@ async function createOrder() {
       },
     );
     latestOrder.value = order;
+    latestPayment.value = null;
     queryForm.value = {
       orderNo: order.orderNo,
       buyerContact: buyerContact.value,
@@ -145,6 +154,23 @@ async function queryOrder() {
       buyerContact: queryForm.value.buyerContact || undefined,
     }),
   });
+  latestPayment.value = null;
+}
+
+async function createPayment() {
+  if (!latestOrder.value) {
+    message.value = '请先创建或查询订单';
+    return;
+  }
+
+  latestPayment.value = await request<PaymentIntent>('/api/storefront/orders/pay', {
+    method: 'POST',
+    body: JSON.stringify({
+      orderNo: latestOrder.value.orderNo,
+      buyerContact: queryForm.value.buyerContact || undefined,
+    }),
+  });
+  message.value = '支付单已创建，请使用支付链接完成付款。';
 }
 
 async function mockPayOrder() {
@@ -162,6 +188,7 @@ async function mockPayOrder() {
       }),
     },
   );
+  latestPayment.value = null;
   message.value = '模拟支付成功，卡密已发放。';
 }
 
@@ -299,6 +326,22 @@ onMounted(() => {
               <dd>{{ latestOrder.paymentStatus }} / {{ latestOrder.deliveryStatus }}</dd>
             </div>
           </dl>
+          <button
+            v-if="latestOrder.paymentStatus !== 'paid'"
+            type="button"
+            @click="createPayment"
+          >
+            发起支付宝支付
+          </button>
+          <a
+            v-if="latestPayment?.payUrl"
+            class="pay-link"
+            :href="latestPayment.payUrl"
+            target="_blank"
+            rel="noreferrer"
+          >
+            打开支付链接：{{ latestPayment.paymentNo }}
+          </a>
           <button
             v-if="latestOrder.paymentStatus !== 'paid'"
             type="button"

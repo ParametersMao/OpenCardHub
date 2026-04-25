@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Headers, Post, Query } from '@nestjs/common';
+import { CreateStorefrontPaymentDto } from './dto/create-storefront-payment.dto';
 import { CreateStorefrontOrderDto } from './dto/create-storefront-order.dto';
 import { MockPayOrderDto } from './dto/mock-pay-order.dto';
 import { QueryStorefrontOrderDto } from './dto/query-storefront-order.dto';
@@ -33,6 +34,11 @@ export class StorefrontController {
   @Post('orders/query')
   queryOrder(@Body() input: QueryStorefrontOrderDto) {
     return this.storefrontService.queryOrder(input);
+  }
+
+  @Post('orders/pay')
+  createPayment(@Body() input: CreateStorefrontPaymentDto) {
+    return this.storefrontService.createPayment(input);
   }
 
   @Post('orders/mock-pay')

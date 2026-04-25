@@ -8,6 +8,8 @@ export interface PaymentProviderCreateInput {
   orderNo: string;
   amount: Decimal;
   subject: string;
+  returnUrl?: string;
+  notifyUrl?: string;
 }
 
 export interface PaymentProviderCreateResult {
@@ -20,7 +22,7 @@ export interface PaymentProviderCreateResult {
 export interface PaymentCallbackResult {
   provider: string;
   paymentNo: string;
-  orderId: string;
+  orderNo: string;
   amount: Decimal;
   rawNotify: Record<string, unknown>;
 }
