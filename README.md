@@ -149,6 +149,8 @@ Initial API surfaces:
 - `GET /api/sites/resolve`
 - `GET /api/storefront`
 - `POST /api/storefront/orders`
+- `POST /api/storefront/orders/query`
+- `POST /api/storefront/orders/mock-pay`
 
 MySQL note:
 

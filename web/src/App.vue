@@ -24,6 +24,21 @@ interface Storefront {
   products: StorefrontProduct[];
 }
 
+interface PublicOrder {
+  id: string;
+  orderNo: string;
+  productName?: string;
+  quantity: number;
+  totalAmount: number;
+  paymentStatus: string;
+  deliveryStatus: string;
+  orderStatus: string;
+  cards?: Array<{
+    id: string;
+    content: string;
+  }>;
+}
+
 const params = new URLSearchParams(location.search);
 const host = ref(params.get('host') ?? location.host);
 const storefront = ref<Storefront | null>(null);
@@ -32,9 +47,16 @@ const message = ref('');
 const buyerContact = ref('');
 const selectedProductId = ref('');
 const quantity = ref(1);
+const latestOrder = ref<PublicOrder | null>(null);
+const queryForm = ref({
+  orderNo: '',
+  buyerContact: '',
+});
 
 const selectedProduct = computed(() =>
-  storefront.value?.products.find((product) => product.id === selectedProductId.value),
+  storefront.value?.products.find(
+    (product) => product.id === selectedProductId.value,
+  ),
 );
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
@@ -64,8 +86,7 @@ async function loadStorefront() {
     selectedProductId.value = storefront.value.products[0]?.id ?? '';
   } catch (error) {
     storefront.value = null;
-    message.value =
-      error instanceof Error ? error.message : '分站加载失败';
+    message.value = error instanceof Error ? error.message : '分站加载失败';
   } finally {
     loading.value = false;
   }
@@ -86,26 +107,62 @@ async function createOrder() {
   message.value = '';
 
   try {
-    const order = await request<{
-      orderNo: string;
-      totalAmount: number;
-      lockedCardIds: string[];
-    }>(`/api/storefront/orders?host=${encodeURIComponent(host.value)}`, {
-      method: 'POST',
-      body: JSON.stringify({
-        productId: selectedProduct.value.id,
-        quantity: quantity.value,
-        buyerContact: buyerContact.value,
-      }),
-    });
-    message.value = `订单 ${order.orderNo} 已创建，金额 ${order.totalAmount}，等待支付。`;
+    const order = await request<PublicOrder>(
+      `/api/storefront/orders?host=${encodeURIComponent(host.value)}`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          productId: selectedProduct.value.id,
+          quantity: quantity.value,
+          buyerContact: buyerContact.value,
+        }),
+      },
+    );
+    latestOrder.value = order;
+    queryForm.value = {
+      orderNo: order.orderNo,
+      buyerContact: buyerContact.value,
+    };
+    message.value = `订单 ${order.orderNo} 已创建，等待支付。`;
     await loadStorefront();
   } catch (error) {
-    message.value =
-      error instanceof Error ? error.message : '下单失败';
+    message.value = error instanceof Error ? error.message : '下单失败';
   } finally {
     loading.value = false;
   }
+}
+
+async function queryOrder() {
+  if (!queryForm.value.orderNo.trim()) {
+    message.value = '请填写订单号';
+    return;
+  }
+
+  latestOrder.value = await request<PublicOrder>('/api/storefront/orders/query', {
+    method: 'POST',
+    body: JSON.stringify({
+      orderNo: queryForm.value.orderNo,
+      buyerContact: queryForm.value.buyerContact || undefined,
+    }),
+  });
+}
+
+async function mockPayOrder() {
+  if (!latestOrder.value) {
+    message.value = '请先创建或查询订单';
+    return;
+  }
+
+  latestOrder.value = await request<PublicOrder>(
+    '/api/storefront/orders/mock-pay',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        orderNo: latestOrder.value.orderNo,
+      }),
+    },
+  );
+  message.value = '模拟支付成功，卡密已发放。';
 }
 
 onMounted(() => {
@@ -201,6 +258,67 @@ onMounted(() => {
             {{ loading ? '处理中' : '提交订单' }}
           </button>
         </form>
+
+        <div class="order-query">
+          <h2>查询订单</h2>
+          <form @submit.prevent="queryOrder">
+            <label>
+              订单号
+              <input v-model="queryForm.orderNo">
+            </label>
+            <label>
+              联系方式
+              <input v-model="queryForm.buyerContact">
+            </label>
+            <button type="submit">
+              查询订单
+            </button>
+          </form>
+        </div>
+
+        <section
+          v-if="latestOrder"
+          class="order-result"
+        >
+          <h2>订单结果</h2>
+          <dl>
+            <div>
+              <dt>订单号</dt>
+              <dd>{{ latestOrder.orderNo }}</dd>
+            </div>
+            <div>
+              <dt>商品</dt>
+              <dd>{{ latestOrder.productName }}</dd>
+            </div>
+            <div>
+              <dt>金额</dt>
+              <dd>￥{{ latestOrder.totalAmount }}</dd>
+            </div>
+            <div>
+              <dt>状态</dt>
+              <dd>{{ latestOrder.paymentStatus }} / {{ latestOrder.deliveryStatus }}</dd>
+            </div>
+          </dl>
+          <button
+            v-if="latestOrder.paymentStatus !== 'paid'"
+            type="button"
+            @click="mockPayOrder"
+          >
+            模拟支付并发货
+          </button>
+          <div
+            v-if="latestOrder.cards?.length"
+            class="card-list"
+          >
+            <strong>已发卡密</strong>
+            <code
+              v-for="card in latestOrder.cards"
+              :key="card.id"
+            >
+              {{ card.content }}
+            </code>
+          </div>
+        </section>
       </aside>
     </section>
   </main>

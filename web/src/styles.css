@@ -182,6 +182,49 @@ button:disabled {
   gap: 12px;
 }
 
+.order-query,
+.order-result {
+  display: grid;
+  gap: 12px;
+  padding-top: 18px;
+  margin-top: 18px;
+  border-top: 1px solid rgba(25, 34, 31, 0.12);
+}
+
+.order-result dl {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.order-result dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.order-result dt {
+  color: #65726e;
+  font-weight: 800;
+}
+
+.order-result dd {
+  margin: 0;
+  text-align: right;
+}
+
+.card-list {
+  display: grid;
+  gap: 8px;
+}
+
+.card-list code {
+  padding: 10px;
+  overflow-wrap: anywhere;
+  border: 1px solid rgba(28, 107, 87, 0.2);
+  background: rgba(28, 107, 87, 0.08);
+}
+
 @media (max-width: 960px) {
   .hero-band,
   .commerce-grid,

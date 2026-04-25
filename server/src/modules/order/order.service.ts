@@ -141,6 +141,37 @@ export class OrderService {
     return orders.map((order) => this.mapOrder(order, order.product));
   }
 
+  async getPublicOrder(orderNo: string, buyerContact?: string) {
+    const order = await this.prisma.order.findUnique({
+      where: {
+        orderNo,
+      },
+      include: {
+        product: true,
+        orderCards: true,
+      },
+    });
+
+    if (!order) {
+      throw new BadRequestException('Order not found.');
+    }
+
+    if (buyerContact && order.buyerContact !== buyerContact) {
+      throw new BadRequestException('Buyer contact does not match order.');
+    }
+
+    return {
+      ...this.mapOrder(order, order.product),
+      cards:
+        order.deliveryStatus === 'delivered'
+          ? order.orderCards.map((card) => ({
+              id: card.id.toString(),
+              content: card.cardContentSnapshot,
+            }))
+          : [],
+    };
+  }
+
   async markOrderPaid(input: {
     orderId: string;
     provider: string;
