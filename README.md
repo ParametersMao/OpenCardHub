@@ -102,6 +102,7 @@ Useful checks:
 ```bash
 npm run build
 npm run lint
+npm run db:validate
 ```
 
 Initial local endpoints:
@@ -147,6 +148,10 @@ Initial API surfaces:
 - `PATCH /api/sites/:id`
 - `POST /api/sites/domains`
 - `GET /api/sites/resolve`
+- `GET /api/agent/sites`
+- `POST /api/agent/sites`
+- `PATCH /api/agent/sites/:id`
+- `POST /api/agent/sites/domains`
 - `GET /api/storefront`
 - `POST /api/storefront/orders`
 - `POST /api/storefront/orders/query`

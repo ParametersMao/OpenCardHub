@@ -1,13 +1,21 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import type { Domain, Site } from '@prisma/client';
+import type { AuthUser } from '../auth/auth.types';
+import { CAPABILITY_KEYS } from '../capability/capability.constants';
+import { CapabilityService } from '../capability/capability.service';
 import { PrismaService } from '../database/prisma.service';
 import type { BindDomainDto } from './dto/bind-domain.dto';
+import type { CreateMySiteDto } from './dto/create-my-site.dto';
 import type { CreateSiteDto } from './dto/create-site.dto';
+import type { UpdateMySiteDto } from './dto/update-my-site.dto';
 import type { UpdateSiteDto } from './dto/update-site.dto';
 
 @Injectable()
 export class SiteService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly capabilityService: CapabilityService,
+  ) {}
 
   async createSite(input: CreateSiteDto) {
     const site = await this.prisma.$transaction(async (tx) => {
@@ -57,6 +65,85 @@ export class SiteService {
     return sites.map((site) => this.mapSite(site));
   }
 
+  async listSitesByOwner(ownerUserId: string) {
+    const sites = await this.prisma.site.findMany({
+      where: {
+        ownerUserId: BigInt(ownerUserId),
+      },
+      orderBy: {
+        id: 'desc',
+      },
+      include: {
+        domains: true,
+      },
+    });
+
+    return sites.map((site) => this.mapSite(site));
+  }
+
+  async createSiteForOwner(user: AuthUser, input: CreateMySiteDto) {
+    this.assertAgentUser(user);
+
+    const siteCapability = await this.capabilityService.checkLevelCapability(
+      user.levelCode,
+      CAPABILITY_KEYS.siteCreate,
+    );
+
+    if (!siteCapability.allowed) {
+      throw new BadRequestException('Current level cannot create storefronts.');
+    }
+
+    const currentSiteCount = await this.prisma.site.count({
+      where: {
+        ownerUserId: BigInt(user.id),
+      },
+    });
+
+    if (
+      siteCapability.limitValue !== undefined &&
+      currentSiteCount >= siteCapability.limitValue
+    ) {
+      throw new BadRequestException('Storefront limit reached for current level.');
+    }
+
+    if (input.systemSubdomain) {
+      await this.assertDomainCapability(user, 'system_sub');
+    }
+
+    return this.createSite({
+      ownerUserId: user.id,
+      name: input.name,
+      systemSubdomain: input.systemSubdomain,
+    });
+  }
+
+  async updateOwnedSite(
+    ownerUserId: string,
+    siteId: string,
+    input: UpdateMySiteDto,
+  ) {
+    await this.assertSiteOwner(ownerUserId, siteId);
+
+    const site = await this.prisma.site.update({
+      where: {
+        id: BigInt(siteId),
+      },
+      data: {
+        name: input.name,
+        logo: input.logo,
+        seoTitle: input.seoTitle,
+        seoKeywords: input.seoKeywords,
+        seoDescription: input.seoDescription,
+        notice: input.notice,
+      },
+      include: {
+        domains: true,
+      },
+    });
+
+    return this.mapSite(site);
+  }
+
   async updateSite(id: string, input: UpdateSiteDto) {
     const site = await this.prisma.site.update({
       where: {
@@ -90,6 +177,15 @@ export class SiteService {
     });
 
     return this.mapDomain(domain);
+  }
+
+  async bindOwnedDomain(user: AuthUser, input: BindDomainDto) {
+    this.assertAgentUser(user);
+    await this.assertSiteOwner(user.id, input.siteId);
+    await this.assertDomainCapability(user, input.type);
+    await this.assertDomainLimit(user, input.siteId);
+
+    return this.bindDomain(input);
   }
 
   async resolveByHost(host: string) {
@@ -156,6 +252,64 @@ export class SiteService {
       domain,
       site: domain.site,
     };
+  }
+
+  private assertAgentUser(user: AuthUser) {
+    if (user.role !== 'agent') {
+      throw new BadRequestException('Only agent users can manage storefronts.');
+    }
+  }
+
+  private async assertSiteOwner(ownerUserId: string, siteId: string) {
+    const site = await this.prisma.site.findFirst({
+      where: {
+        id: BigInt(siteId),
+        ownerUserId: BigInt(ownerUserId),
+      },
+    });
+
+    if (!site) {
+      throw new BadRequestException('Storefront not found for current user.');
+    }
+  }
+
+  private async assertDomainCapability(
+    user: AuthUser,
+    type: BindDomainDto['type'],
+  ) {
+    const key =
+      type === 'system_sub'
+        ? CAPABILITY_KEYS.domainSystemSub
+        : CAPABILITY_KEYS.domainCustom;
+    const capability = await this.capabilityService.checkLevelCapability(
+      user.levelCode,
+      key,
+    );
+
+    if (!capability.allowed) {
+      throw new BadRequestException('Current level cannot bind this domain type.');
+    }
+  }
+
+  private async assertDomainLimit(user: AuthUser, siteId: string) {
+    const capability = await this.capabilityService.checkLevelCapability(
+      user.levelCode,
+      CAPABILITY_KEYS.domainMaxCount,
+    );
+
+    if (!capability.allowed || capability.limitValue === undefined) {
+      return;
+    }
+
+    const domainCount = await this.prisma.domain.count({
+      where: {
+        siteId: BigInt(siteId),
+      },
+    });
+
+    if (domainCount >= capability.limitValue) {
+      throw new BadRequestException('Domain limit reached for current level.');
+    }
   }
 
   private mapSite(site: Site & { domains?: Domain[] }) {
