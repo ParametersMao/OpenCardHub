@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 
-type ViewKey =
+type AdminViewKey =
   | 'overview'
   | 'levels'
   | 'users'
   | 'catalog'
   | 'inventory'
   | 'sites';
+type AgentViewKey = 'agent-sites';
+type ViewKey = AdminViewKey | AgentViewKey;
 
 interface Capability {
   id?: string;
@@ -42,27 +44,35 @@ interface Product {
   status: string;
 }
 
+interface SiteDomain {
+  id?: string;
+  domain: string;
+  type: string;
+  status: string;
+  isPrimary: boolean;
+}
+
 interface Site {
   id: string;
   name: string;
   ownerUserId: string;
   status: string;
-  domains: Array<{
-    domain: string;
-    type: string;
-    status: string;
-    isPrimary: boolean;
-  }>;
+  logo?: string;
+  seoTitle?: string;
+  seoKeywords?: string;
+  seoDescription?: string;
+  notice?: string;
+  domains: SiteDomain[];
 }
 
 interface User {
   id: string;
   username: string;
-  role: string;
-  levelCode: string;
-  status: string;
-  balance: number;
-  createdAt: string;
+  role: 'admin' | 'agent' | 'buyer';
+  levelCode: 'V0' | 'V1' | 'V2';
+  status?: string;
+  balance?: number;
+  createdAt?: string;
 }
 
 interface StockSnapshot {
@@ -70,13 +80,16 @@ interface StockSnapshot {
   counts: Record<string, number>;
 }
 
-const navItems: Array<{ key: ViewKey; label: string }> = [
+const adminNavItems: Array<{ key: AdminViewKey; label: string }> = [
   { key: 'overview', label: '总览' },
   { key: 'levels', label: '等级能力' },
   { key: 'users', label: '用户' },
   { key: 'catalog', label: '商品' },
   { key: 'inventory', label: '库存' },
   { key: 'sites', label: '分站' },
+];
+const agentNavItems: Array<{ key: AgentViewKey; label: string }> = [
+  { key: 'agent-sites', label: '我的分站' },
 ];
 
 const activeView = ref<ViewKey>('overview');
@@ -89,6 +102,7 @@ const capabilityKeys = ref<string[]>([]);
 const categories = ref<Category[]>([]);
 const products = ref<Product[]>([]);
 const sites = ref<Site[]>([]);
+const agentSites = ref<Site[]>([]);
 const users = ref<User[]>([]);
 const stockSnapshots = ref<Record<string, StockSnapshot>>({});
 
@@ -120,7 +134,25 @@ const siteForm = ref({
   name: '',
   systemSubdomain: '',
 });
+const mySiteForm = ref({
+  name: '',
+  systemSubdomain: '',
+});
+const myDomainForm = ref({
+  siteId: '',
+  domain: '',
+  type: 'system_sub',
+});
+const editingSites = ref<Record<string, Partial<Site>>>({});
 
+const isAdmin = computed(() => currentUser.value?.role === 'admin');
+const navItems = computed(() => (isAdmin.value ? adminNavItems : agentNavItems));
+const currentViewLabel = computed(
+  () => navItems.value.find((item) => item.key === activeView.value)?.label,
+);
+const agentUsers = computed(() =>
+  users.value.filter((user) => user.role === 'agent' || user.levelCode !== 'V0'),
+);
 const totals = computed(() => [
   { label: '等级模板', value: levels.value.length },
   { label: '商品数量', value: products.value.length },
@@ -146,9 +178,7 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     if (response.status === 401) {
-      accessToken.value = '';
-      currentUser.value = null;
-      localStorage.removeItem('opencardhub_token');
+      clearSession();
     }
     throw new Error(await response.text());
   }
@@ -171,6 +201,7 @@ async function login() {
     accessToken.value = result.accessToken;
     currentUser.value = result.user;
     localStorage.setItem('opencardhub_token', result.accessToken);
+    activeView.value = result.user.role === 'admin' ? 'overview' : 'agent-sites';
     await loadAll();
   } catch (error) {
     message.value = error instanceof Error ? error.message : '登录失败';
@@ -179,10 +210,15 @@ async function login() {
   }
 }
 
-function logout() {
+function clearSession() {
   accessToken.value = '';
   currentUser.value = null;
   localStorage.removeItem('opencardhub_token');
+}
+
+function logout() {
+  clearSession();
+  message.value = '';
 }
 
 async function loadAll() {
@@ -194,38 +230,70 @@ async function loadAll() {
   message.value = '';
 
   try {
-    const [
-      me,
-      persistedLevels,
-      keys,
-      userList,
-      categoryList,
-      productList,
-      siteList,
-    ] =
-      await Promise.all([
-        request<User>('/api/auth/me'),
-        request<Level[]>('/api/capabilities/levels/persisted'),
-        request<string[]>('/api/capabilities/keys'),
-        request<User[]>('/api/users'),
-        request<Category[]>('/api/catalog/categories'),
-        request<Product[]>('/api/catalog/products'),
-        request<Site[]>('/api/sites'),
-      ]);
-
+    const me = await request<User>('/api/auth/me');
     currentUser.value = me;
-    levels.value = persistedLevels;
-    capabilityKeys.value = keys;
-    users.value = userList;
-    categories.value = categoryList;
-    products.value = productList;
-    sites.value = siteList;
+
+    if (me.role === 'admin') {
+      activeView.value = isAdminView(activeView.value) ? activeView.value : 'overview';
+      await loadAdminData();
+    } else if (me.role === 'agent') {
+      activeView.value = 'agent-sites';
+      await loadAgentData();
+    } else {
+      activeView.value = 'agent-sites';
+      message.value = '当前账号是普通买家，暂不能进入管理台。';
+    }
   } catch (error) {
-    message.value =
-      error instanceof Error ? error.message : '加载管理数据失败';
+    message.value = error instanceof Error ? error.message : '加载数据失败';
   } finally {
     loading.value = false;
   }
+}
+
+function isAdminView(view: ViewKey): view is AdminViewKey {
+  return adminNavItems.some((item) => item.key === view);
+}
+
+async function loadAdminData() {
+  const [
+    persistedLevels,
+    keys,
+    userList,
+    categoryList,
+    productList,
+    siteList,
+  ] = await Promise.all([
+    request<Level[]>('/api/capabilities/levels/persisted'),
+    request<string[]>('/api/capabilities/keys'),
+    request<User[]>('/api/users'),
+    request<Category[]>('/api/catalog/categories'),
+    request<Product[]>('/api/catalog/products'),
+    request<Site[]>('/api/sites'),
+  ]);
+
+  levels.value = persistedLevels;
+  capabilityKeys.value = keys;
+  users.value = userList;
+  categories.value = categoryList;
+  products.value = productList;
+  sites.value = siteList;
+}
+
+async function loadAgentData() {
+  agentSites.value = await request<Site[]>('/api/agent/sites');
+  editingSites.value = Object.fromEntries(
+    agentSites.value.map((site) => [
+      site.id,
+      {
+        name: site.name,
+        logo: site.logo ?? '',
+        seoTitle: site.seoTitle ?? '',
+        seoKeywords: site.seoKeywords ?? '',
+        seoDescription: site.seoDescription ?? '',
+        notice: site.notice ?? '',
+      },
+    ]),
+  );
 }
 
 async function bootstrapLevels() {
@@ -238,8 +306,7 @@ async function bootstrapLevels() {
     });
     message.value = 'V0 / V1 / V2 默认能力已初始化';
   } catch (error) {
-    message.value =
-      error instanceof Error ? error.message : '初始化等级能力失败';
+    message.value = error instanceof Error ? error.message : '初始化等级能力失败';
   } finally {
     loading.value = false;
   }
@@ -402,7 +469,7 @@ async function refreshStock(productId: string) {
 
 async function createSite() {
   if (!siteForm.value.ownerUserId || !siteForm.value.name.trim()) {
-    message.value = '请填写代理用户 ID 和分站名称';
+    message.value = '请填写代理用户和分站名称';
     return;
   }
 
@@ -419,6 +486,56 @@ async function createSite() {
     systemSubdomain: '',
   };
   await loadAll();
+}
+
+async function createMySite() {
+  if (!mySiteForm.value.name.trim()) {
+    message.value = '请填写分站名称';
+    return;
+  }
+
+  await request('/api/agent/sites', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: mySiteForm.value.name,
+      systemSubdomain: mySiteForm.value.systemSubdomain || undefined,
+    }),
+  });
+  mySiteForm.value = {
+    name: '',
+    systemSubdomain: '',
+  };
+  message.value = '分站已创建';
+  await loadAgentData();
+}
+
+async function updateMySite(site: Site) {
+  await request(`/api/agent/sites/${site.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(editingSites.value[site.id]),
+  });
+  message.value = '分站信息已保存';
+  await loadAgentData();
+}
+
+async function bindMyDomain() {
+  if (!myDomainForm.value.siteId || !myDomainForm.value.domain.trim()) {
+    message.value = '请选择分站并填写域名';
+    return;
+  }
+
+  await request('/api/agent/sites/domains', {
+    method: 'POST',
+    body: JSON.stringify(myDomainForm.value),
+  });
+  myDomainForm.value.domain = '';
+  message.value = '域名已提交';
+  await loadAgentData();
+}
+
+function storefrontPreviewUrl(site: Site) {
+  const domain = site.domains.find((item) => item.status === 'active');
+  return domain ? `http://localhost:5174/?host=${domain.domain}` : '';
 }
 
 onMounted(() => {
@@ -438,12 +555,12 @@ onMounted(() => {
         <span class="brand-mark">O</span>
         <div>
           <strong>OpenCardHub</strong>
-          <small>Admin Console</small>
+          <small>Console</small>
         </div>
       </div>
-      <h1>管理员登录</h1>
+      <h1>登录控制台</h1>
       <p class="login-copy">
-        使用总后台账号进入配置中心、商品、库存和分站管理。
+        管理员可以配置主站、商品和代理；代理登录后可以管理自己的分站。
       </p>
       <form
         class="form-grid single"
@@ -485,8 +602,13 @@ onMounted(() => {
         <span class="brand-mark">O</span>
         <div>
           <strong>OpenCardHub</strong>
-          <small>Admin Console</small>
+          <small>{{ isAdmin ? 'Admin Console' : 'Agent Console' }}</small>
         </div>
+      </div>
+
+      <div class="profile-card">
+        <strong>{{ currentUser?.username }}</strong>
+        <span>{{ currentUser?.role }} / {{ currentUser?.levelCode }}</span>
       </div>
 
       <nav class="nav-list">
@@ -508,22 +630,24 @@ onMounted(() => {
           <p class="eyebrow">
             配置驱动的虚拟商品分销中台
           </p>
-          <h1>{{ navItems.find((item) => item.key === activeView)?.label }}</h1>
+          <h1>{{ currentViewLabel }}</h1>
         </div>
-        <button
-          class="ghost-button"
-          type="button"
-          @click="loadAll"
-        >
-          刷新
-        </button>
-        <button
-          class="ghost-button"
-          type="button"
-          @click="logout"
-        >
-          退出
-        </button>
+        <div class="topbar-actions">
+          <button
+            class="ghost-button"
+            type="button"
+            @click="loadAll"
+          >
+            刷新
+          </button>
+          <button
+            class="ghost-button"
+            type="button"
+            @click="logout"
+          >
+            退出
+          </button>
+        </div>
       </header>
 
       <p
@@ -554,8 +678,8 @@ onMounted(() => {
             <span>{{ loading ? '加载中' : '已连接后端接口' }}</span>
           </div>
           <div class="timeline">
-            <p>已完成：等级能力、配置中心、商品、卡密库存、订单、支付骨架、分站解析、分站商品覆盖。</p>
-            <p>下一步：把这些后台操作逐步补成完整的可配置表单和权限控制。</p>
+            <p>已完成：等级能力、配置中心、商品、卡密库存、订单、支付骨架、分站解析、分站商品覆盖、代理自助开站。</p>
+            <p>下一步：继续完善代理可配置项、分站商品独立定价、真实支付回调和域名自动化。</p>
           </div>
         </section>
       </section>
@@ -918,7 +1042,7 @@ onMounted(() => {
                 <td>{{ user.username }}</td>
                 <td>{{ user.role }}</td>
                 <td>{{ user.levelCode }}</td>
-                <td>{{ user.balance }}</td>
+                <td>{{ user.balance ?? 0 }}</td>
                 <td>{{ user.status }}</td>
                 <td>
                   <button
@@ -953,13 +1077,13 @@ onMounted(() => {
             @submit.prevent="createSite"
           >
             <label>
-              代理用户 ID
+              代理用户
               <select v-model="siteForm.ownerUserId">
                 <option value="">
                   请选择
                 </option>
                 <option
-                  v-for="user in users"
+                  v-for="user in agentUsers"
                   :key="user.id"
                   :value="user.id"
                 >
@@ -1121,6 +1245,178 @@ onMounted(() => {
             class="empty-text"
           >
             选择商品后查看库存状态。
+          </p>
+        </section>
+      </section>
+
+      <section
+        v-if="activeView === 'agent-sites'"
+        class="view-stack"
+      >
+        <section class="panel">
+          <div class="panel-heading">
+            <h2>创建我的分站</h2>
+            <span>是否可创建、可创建几个，由主站等级能力控制</span>
+          </div>
+          <form
+            class="form-grid three"
+            @submit.prevent="createMySite"
+          >
+            <label>
+              分站名称
+              <input
+                v-model="mySiteForm.name"
+                placeholder="例如：小张自动发卡站"
+              >
+            </label>
+            <label>
+              系统子域名
+              <input
+                v-model="mySiteForm.systemSubdomain"
+                placeholder="agent.example.com"
+              >
+            </label>
+            <button
+              class="solid-button"
+              type="submit"
+            >
+              一键开分站
+            </button>
+          </form>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <h2>绑定域名</h2>
+            <span>系统子域名会自动启用，自定义域名默认待审核</span>
+          </div>
+          <form
+            class="form-grid three"
+            @submit.prevent="bindMyDomain"
+          >
+            <label>
+              选择分站
+              <select v-model="myDomainForm.siteId">
+                <option value="">
+                  请选择
+                </option>
+                <option
+                  v-for="site in agentSites"
+                  :key="site.id"
+                  :value="site.id"
+                >
+                  {{ site.name }}
+                </option>
+              </select>
+            </label>
+            <label>
+              域名
+              <input
+                v-model="myDomainForm.domain"
+                placeholder="shop.example.com"
+              >
+            </label>
+            <label>
+              类型
+              <select v-model="myDomainForm.type">
+                <option value="system_sub">
+                  系统子域名
+                </option>
+                <option value="custom">
+                  自定义域名
+                </option>
+              </select>
+            </label>
+            <button
+              class="solid-button"
+              type="submit"
+            >
+              绑定域名
+            </button>
+          </form>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <h2>我的分站</h2>
+            <span>{{ agentSites.length }} 个分站</span>
+          </div>
+          <div class="site-card-grid">
+            <article
+              v-for="site in agentSites"
+              :key="site.id"
+              class="site-card"
+            >
+              <div class="site-card-head">
+                <div>
+                  <strong>{{ site.name }}</strong>
+                  <span>{{ site.status }}</span>
+                </div>
+                <a
+                  v-if="storefrontPreviewUrl(site)"
+                  :href="storefrontPreviewUrl(site)"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  预览分站
+                </a>
+              </div>
+
+              <div class="domain-row">
+                <span
+                  v-for="domain in site.domains"
+                  :key="domain.domain"
+                  class="domain-pill"
+                >
+                  {{ domain.domain }} / {{ domain.status }}
+                </span>
+              </div>
+
+              <form
+                class="form-grid"
+                @submit.prevent="updateMySite(site)"
+              >
+                <label>
+                  分站名称
+                  <input v-model="editingSites[site.id].name">
+                </label>
+                <label>
+                  Logo
+                  <input v-model="editingSites[site.id].logo">
+                </label>
+                <label>
+                  SEO 标题
+                  <input v-model="editingSites[site.id].seoTitle">
+                </label>
+                <label>
+                  SEO 关键词
+                  <input v-model="editingSites[site.id].seoKeywords">
+                </label>
+                <label class="wide">
+                  SEO 描述
+                  <input v-model="editingSites[site.id].seoDescription">
+                </label>
+                <label class="wide">
+                  分站公告
+                  <textarea
+                    v-model="editingSites[site.id].notice"
+                    placeholder="展示给买家的公告"
+                  />
+                </label>
+                <button
+                  class="solid-button"
+                  type="submit"
+                >
+                  保存分站配置
+                </button>
+              </form>
+            </article>
+          </div>
+          <p
+            v-if="agentSites.length === 0"
+            class="empty-text"
+          >
+            暂无分站。创建权限由主站管理员在 V1/V2 能力中配置。
           </p>
         </section>
       </section>

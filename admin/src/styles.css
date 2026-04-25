@@ -92,6 +92,20 @@ button {
   color: #64706b;
 }
 
+.profile-card {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  margin: -14px 0 24px;
+  border: 1px solid rgba(24, 33, 31, 0.12);
+  background: rgba(255, 252, 244, 0.62);
+}
+
+.profile-card span {
+  color: #64706b;
+  font-size: 12px;
+}
+
 .nav-list {
   display: grid;
   gap: 8px;
@@ -127,6 +141,11 @@ button {
   gap: 20px;
   align-items: center;
   margin-bottom: 24px;
+}
+
+.topbar-actions {
+  display: flex;
+  gap: 10px;
 }
 
 .eyebrow {
@@ -343,6 +362,49 @@ textarea {
   gap: 12px;
 }
 
+.site-card-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.site-card {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid rgba(24, 33, 31, 0.12);
+  background: rgba(255, 255, 255, 0.48);
+}
+
+.site-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: start;
+}
+
+.site-card-head strong,
+.site-card-head span {
+  display: block;
+}
+
+.site-card-head span {
+  margin-top: 4px;
+  color: #64706b;
+  font-size: 13px;
+}
+
+.site-card-head a {
+  color: #1c6b57;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.domain-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .empty-text {
   color: #64706b;
 }
@@ -424,6 +486,12 @@ td {
 
   .topbar {
     align-items: start;
+    flex-direction: column;
+  }
+
+  .topbar-actions,
+  .site-card-head {
+    width: 100%;
     flex-direction: column;
   }
 }
