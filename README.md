@@ -120,6 +120,8 @@ Initial API surfaces:
 - `GET /api/inventory/products/:productId/cards`
 - `GET /api/inventory/products/:productId/stock`
 - `POST /api/inventory/cards/lock`
+- `GET /api/orders`
+- `POST /api/orders`
 
 MySQL note:
 
