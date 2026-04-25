@@ -12,6 +12,7 @@ import { PaymentModule } from './modules/payment/payment.module';
 import { PricingModule } from './modules/pricing/pricing.module';
 import { SiteModule } from './modules/site/site.module';
 import { StorefrontModule } from './modules/storefront/storefront.module';
+import { UserModule } from './modules/user/user.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { StorefrontModule } from './modules/storefront/storefront.module';
     DatabaseModule,
     HealthModule,
     ConfigCenterModule,
+    UserModule,
     CapabilityModule,
     CatalogModule,
     InventoryModule,

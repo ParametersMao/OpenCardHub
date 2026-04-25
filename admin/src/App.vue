@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 
-type ViewKey = 'overview' | 'levels' | 'catalog' | 'sites';
+type ViewKey = 'overview' | 'levels' | 'users' | 'catalog' | 'sites';
 
 interface Capability {
   id?: string;
@@ -49,9 +49,19 @@ interface Site {
   }>;
 }
 
+interface User {
+  id: string;
+  username: string;
+  levelCode: string;
+  status: string;
+  balance: number;
+  createdAt: string;
+}
+
 const navItems: Array<{ key: ViewKey; label: string }> = [
   { key: 'overview', label: '总览' },
   { key: 'levels', label: '等级能力' },
+  { key: 'users', label: '用户' },
   { key: 'catalog', label: '商品' },
   { key: 'sites', label: '分站' },
 ];
@@ -63,7 +73,13 @@ const levels = ref<Level[]>([]);
 const categories = ref<Category[]>([]);
 const products = ref<Product[]>([]);
 const sites = ref<Site[]>([]);
+const users = ref<User[]>([]);
 
+const userForm = ref({
+  username: '',
+  password: '',
+  levelCode: 'V0',
+});
 const categoryForm = ref({ name: '' });
 const productForm = ref({
   categoryId: '',
@@ -83,6 +99,7 @@ const totals = computed(() => [
   { label: '等级模板', value: levels.value.length },
   { label: '商品数量', value: products.value.length },
   { label: '分站数量', value: sites.value.length },
+  { label: '用户数量', value: users.value.length },
   {
     label: '可售库存',
     value: products.value.reduce((sum, product) => sum + product.stockCount, 0),
@@ -110,15 +127,17 @@ async function loadAll() {
   message.value = '';
 
   try {
-    const [persistedLevels, categoryList, productList, siteList] =
+    const [persistedLevels, userList, categoryList, productList, siteList] =
       await Promise.all([
         request<Level[]>('/api/capabilities/levels/persisted'),
+        request<User[]>('/api/users'),
         request<Category[]>('/api/catalog/categories'),
         request<Product[]>('/api/catalog/products'),
         request<Site[]>('/api/sites'),
       ]);
 
     levels.value = persistedLevels;
+    users.value = userList;
     categories.value = categoryList;
     products.value = productList;
     sites.value = siteList;
@@ -145,6 +164,24 @@ async function bootstrapLevels() {
   } finally {
     loading.value = false;
   }
+}
+
+async function createUser() {
+  if (!userForm.value.username.trim() || !userForm.value.password.trim()) {
+    message.value = '请填写用户名和密码';
+    return;
+  }
+
+  await request('/api/users', {
+    method: 'POST',
+    body: JSON.stringify(userForm.value),
+  });
+  userForm.value = {
+    username: '',
+    password: '',
+    levelCode: 'V0',
+  };
+  await loadAll();
 }
 
 async function createCategory() {
@@ -453,6 +490,83 @@ onMounted(() => {
       </section>
 
       <section
+        v-if="activeView === 'users'"
+        class="view-stack two-column"
+      >
+        <section class="panel">
+          <div class="panel-heading">
+            <h2>创建用户</h2>
+          </div>
+          <form
+            class="form-grid"
+            @submit.prevent="createUser"
+          >
+            <label>
+              用户名
+              <input v-model="userForm.username">
+            </label>
+            <label>
+              初始密码
+              <input
+                v-model="userForm.password"
+                type="password"
+              >
+            </label>
+            <label>
+              等级
+              <select v-model="userForm.levelCode">
+                <option value="V0">
+                  V0 普通用户
+                </option>
+                <option value="V1">
+                  V1 一级代理
+                </option>
+                <option value="V2">
+                  V2 二级代理
+                </option>
+              </select>
+            </label>
+            <button
+              class="solid-button"
+              type="submit"
+            >
+              创建用户
+            </button>
+          </form>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <h2>用户列表</h2>
+            <span>{{ users.length }} 个用户</span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>用户名</th>
+                <th>等级</th>
+                <th>余额</th>
+                <th>状态</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="user in users"
+                :key="user.id"
+              >
+                <td>{{ user.id }}</td>
+                <td>{{ user.username }}</td>
+                <td>{{ user.levelCode }}</td>
+                <td>{{ user.balance }}</td>
+                <td>{{ user.status }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+      </section>
+
+      <section
         v-if="activeView === 'sites'"
         class="view-stack"
       >
@@ -466,7 +580,18 @@ onMounted(() => {
           >
             <label>
               代理用户 ID
-              <input v-model="siteForm.ownerUserId">
+              <select v-model="siteForm.ownerUserId">
+                <option value="">
+                  请选择
+                </option>
+                <option
+                  v-for="user in users"
+                  :key="user.id"
+                  :value="user.id"
+                >
+                  {{ user.username }} / {{ user.levelCode }} / ID {{ user.id }}
+                </option>
+              </select>
             </label>
             <label>
               分站名称
