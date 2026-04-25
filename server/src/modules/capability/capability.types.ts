@@ -24,6 +24,7 @@ export interface CapabilityCheckResult {
   level: LevelCode;
   key: CapabilityKey;
   limitValue?: number;
+  config?: Record<string, unknown>;
 }
 
 export interface PersistedCapability {

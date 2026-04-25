@@ -110,6 +110,7 @@ export class CapabilityService {
         level,
         key,
         limitValue: persistedCapability.limitValue ?? undefined,
+        config: this.asRecord(persistedCapability.configJson),
       };
     }
 
@@ -123,6 +124,7 @@ export class CapabilityService {
       level,
       key,
       limitValue: capability?.limitValue,
+      config: capability?.config,
     };
   }
 

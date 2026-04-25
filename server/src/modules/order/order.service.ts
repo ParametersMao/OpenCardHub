@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma, type Order, type Product } from '@prisma/client';
 import type { Decimal } from '@prisma/client/runtime/library';
+import { CAPABILITY_KEYS } from '../capability/capability.constants';
 import { PrismaService } from '../database/prisma.service';
 import type { CreateOrderDto } from './dto/create-order.dto';
 
@@ -65,7 +66,20 @@ export class OrderService {
             : product.salePrice;
       const totalAmount = unitPrice.mul(quantity);
       const costAmount = product.costPrice.mul(quantity);
-      const platformProfit = totalAmount.minus(costAmount);
+      const agentSettlementUnit = input.agentUserId
+        ? await this.resolveAgentSettlementUnit(
+            tx,
+            BigInt(input.agentUserId),
+            product,
+          )
+        : undefined;
+      const agentSettlementAmount = agentSettlementUnit?.mul(quantity);
+      const agentProfit = agentSettlementAmount
+        ? totalAmount.minus(agentSettlementAmount)
+        : new Prisma.Decimal(0);
+      const platformProfit = agentSettlementAmount
+        ? agentSettlementAmount.minus(costAmount)
+        : totalAmount.minus(costAmount);
 
       const createdOrder = await tx.order.create({
         data: {
@@ -78,6 +92,7 @@ export class OrderService {
           unitPrice,
           totalAmount,
           costAmount,
+          agentProfit,
           platformProfit,
           paymentStatus: 'pending',
           deliveryStatus: 'pending',
@@ -347,6 +362,47 @@ export class OrderService {
       .toString()
       .padStart(6, '0');
     return `OC${Date.now()}${random}`;
+  }
+
+  private async resolveAgentSettlementUnit(
+    tx: Prisma.TransactionClient,
+    agentUserId: bigint,
+    product: Product,
+  ) {
+    const agent = await tx.user.findUnique({
+      where: {
+        id: agentUserId,
+      },
+    });
+
+    if (!agent || agent.status !== 'active') {
+      throw new BadRequestException('Agent user is not available.');
+    }
+
+    const discountCapability = await tx.levelCapability.findFirst({
+      where: {
+        capabilityKey: CAPABILITY_KEYS.agentDiscount,
+        level: {
+          code: agent.levelCode,
+        },
+      },
+    });
+    const discountRate = this.readDiscountRate(discountCapability?.configJson);
+
+    if (!discountCapability?.enabled || discountRate <= 0) {
+      return product.defaultWholesalePrice;
+    }
+
+    return product.defaultWholesalePrice.mul(discountRate);
+  }
+
+  private readDiscountRate(value: unknown) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return 1;
+    }
+
+    const discountRate = (value as Record<string, unknown>).discountRate;
+    return typeof discountRate === 'number' ? discountRate : 1;
   }
 
   private toPrismaJson(
