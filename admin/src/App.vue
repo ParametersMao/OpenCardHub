@@ -7,8 +7,9 @@ type AdminViewKey =
   | 'users'
   | 'catalog'
   | 'inventory'
-  | 'sites';
-type AgentViewKey = 'agent-sites' | 'agent-orders';
+  | 'sites'
+  | 'finance';
+type AgentViewKey = 'agent-sites' | 'agent-orders' | 'agent-finance';
 type ViewKey = AdminViewKey | AgentViewKey;
 
 interface Capability {
@@ -122,6 +123,36 @@ interface AgentOrderSummary {
   platformProfit: number;
 }
 
+interface FinanceSummary {
+  balance: number;
+  pendingWithdrawalAmount: number;
+  totalProfit: number;
+}
+
+interface FinanceTransaction {
+  id: string;
+  type: string;
+  amount: number;
+  balanceAfter: number;
+  referenceNo: string;
+  remark?: string;
+  createdAt: string;
+}
+
+interface Withdrawal {
+  id: string;
+  userId: string;
+  username?: string;
+  amount: number;
+  status: string;
+  accountType: string;
+  accountName: string;
+  accountNo: string;
+  remark?: string;
+  reviewRemark?: string;
+  createdAt: string;
+}
+
 const adminNavItems: Array<{ key: AdminViewKey; label: string }> = [
   { key: 'overview', label: '总览' },
   { key: 'levels', label: '等级能力' },
@@ -129,10 +160,12 @@ const adminNavItems: Array<{ key: AdminViewKey; label: string }> = [
   { key: 'catalog', label: '商品' },
   { key: 'inventory', label: '库存' },
   { key: 'sites', label: '分站' },
+  { key: 'finance', label: '财务' },
 ];
 const agentNavItems: Array<{ key: AgentViewKey; label: string }> = [
   { key: 'agent-sites', label: '我的分站' },
   { key: 'agent-orders', label: '我的订单' },
+  { key: 'agent-finance', label: '我的财务' },
 ];
 
 const activeView = ref<ViewKey>('overview');
@@ -149,6 +182,14 @@ const agentSites = ref<Site[]>([]);
 const agentProducts = ref<Product[]>([]);
 const agentSiteOverrides = ref<Record<string, SiteProductOverride[]>>({});
 const agentOrders = ref<AgentOrder[]>([]);
+const agentFinanceSummary = ref<FinanceSummary>({
+  balance: 0,
+  pendingWithdrawalAmount: 0,
+  totalProfit: 0,
+});
+const agentFinanceTransactions = ref<FinanceTransaction[]>([]);
+const agentWithdrawals = ref<Withdrawal[]>([]);
+const adminWithdrawals = ref<Withdrawal[]>([]);
 const agentOrderSummary = ref<AgentOrderSummary>({
   totalOrders: 0,
   paidOrders: 0,
@@ -210,6 +251,13 @@ const myProductForm = ref({
   customPrice: undefined as number | undefined,
   isVisible: true,
   sortOrder: 0,
+});
+const withdrawalForm = ref({
+  amount: 0,
+  accountType: 'alipay',
+  accountName: '',
+  accountNo: '',
+  remark: '',
 });
 const editingSites = ref<Record<string, Partial<Site>>>({});
 
@@ -330,6 +378,7 @@ async function loadAdminData() {
     categoryList,
     productList,
     siteList,
+    withdrawalList,
   ] = await Promise.all([
     request<Level[]>('/api/capabilities/levels/persisted'),
     request<string[]>('/api/capabilities/keys'),
@@ -337,6 +386,7 @@ async function loadAdminData() {
     request<Category[]>('/api/catalog/categories'),
     request<Product[]>('/api/catalog/products'),
     request<Site[]>('/api/sites'),
+    request<Withdrawal[]>('/api/finance/withdrawals'),
   ]);
 
   levels.value = persistedLevels;
@@ -345,20 +395,35 @@ async function loadAdminData() {
   categories.value = categoryList;
   products.value = productList;
   sites.value = siteList;
+  adminWithdrawals.value = withdrawalList;
 }
 
 async function loadAgentData() {
-  const [mySites, availableProducts, myOrders, orderSummary] = await Promise.all([
-    request<Site[]>('/api/agent/sites'),
-    request<Product[]>('/api/agent/catalog/products'),
-    request<AgentOrder[]>('/api/agent/orders'),
-    request<AgentOrderSummary>('/api/agent/orders/summary'),
-  ]);
+  const [
+    mySites,
+    availableProducts,
+    myOrders,
+    orderSummary,
+    financeSummary,
+    financeTransactions,
+    withdrawals,
+  ] = await Promise.all([
+      request<Site[]>('/api/agent/sites'),
+      request<Product[]>('/api/agent/catalog/products'),
+      request<AgentOrder[]>('/api/agent/orders'),
+      request<AgentOrderSummary>('/api/agent/orders/summary'),
+      request<FinanceSummary>('/api/agent/finance/summary'),
+      request<FinanceTransaction[]>('/api/agent/finance/transactions'),
+      request<Withdrawal[]>('/api/agent/finance/withdrawals'),
+    ]);
 
   agentSites.value = mySites;
   agentProducts.value = availableProducts;
   agentOrders.value = myOrders;
   agentOrderSummary.value = orderSummary;
+  agentFinanceSummary.value = financeSummary;
+  agentFinanceTransactions.value = financeTransactions;
+  agentWithdrawals.value = withdrawals;
   editingSites.value = Object.fromEntries(
     agentSites.value.map((site) => [
       site.id,
@@ -689,6 +754,49 @@ function getProductOverride(siteId: string, productId: string) {
   return agentSiteOverrides.value[siteId]?.find(
     (override) => override.productId === productId,
   );
+}
+
+async function createWithdrawal() {
+  if (withdrawalForm.value.amount <= 0) {
+    message.value = '提现金额必须大于 0';
+    return;
+  }
+
+  if (!withdrawalForm.value.accountName.trim() || !withdrawalForm.value.accountNo.trim()) {
+    message.value = '请填写收款姓名和收款账号';
+    return;
+  }
+
+  await request('/api/agent/finance/withdrawals', {
+    method: 'POST',
+    body: JSON.stringify({
+      ...withdrawalForm.value,
+      remark: withdrawalForm.value.remark || undefined,
+    }),
+  });
+  withdrawalForm.value = {
+    amount: 0,
+    accountType: 'alipay',
+    accountName: '',
+    accountNo: '',
+    remark: '',
+  };
+  message.value = '提现申请已提交';
+  await loadAgentData();
+}
+
+async function reviewWithdrawal(
+  withdrawal: Withdrawal,
+  status: 'approved' | 'rejected' | 'paid',
+) {
+  await request(`/api/finance/withdrawals/${withdrawal.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      status,
+    }),
+  });
+  message.value = '提现状态已更新';
+  await loadAll();
 }
 
 function storefrontPreviewUrl(site: Site) {
@@ -1495,6 +1603,76 @@ onMounted(() => {
       </section>
 
       <section
+        v-if="activeView === 'finance'"
+        class="view-stack"
+      >
+        <section class="panel">
+          <div class="panel-heading">
+            <h2>提现审核</h2>
+            <span>{{ adminWithdrawals.length }} 条提现申请</span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>代理</th>
+                <th>金额</th>
+                <th>账号</th>
+                <th>状态</th>
+                <th>备注</th>
+                <th>申请时间</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="withdrawal in adminWithdrawals"
+                :key="withdrawal.id"
+              >
+                <td>{{ withdrawal.username ?? withdrawal.userId }}</td>
+                <td>￥{{ withdrawal.amount }}</td>
+                <td>{{ withdrawal.accountType }} / {{ withdrawal.accountName }} / {{ withdrawal.accountNo }}</td>
+                <td>{{ withdrawal.status }}</td>
+                <td>{{ withdrawal.remark ?? '-' }}</td>
+                <td>{{ new Date(withdrawal.createdAt).toLocaleString() }}</td>
+                <td>
+                  <button
+                    v-if="withdrawal.status === 'pending'"
+                    class="table-button"
+                    type="button"
+                    @click="reviewWithdrawal(withdrawal, 'approved')"
+                  >
+                    通过
+                  </button>
+                  <button
+                    v-if="withdrawal.status === 'pending' || withdrawal.status === 'approved'"
+                    class="table-button"
+                    type="button"
+                    @click="reviewWithdrawal(withdrawal, 'paid')"
+                  >
+                    标记已打款
+                  </button>
+                  <button
+                    v-if="withdrawal.status === 'pending' || withdrawal.status === 'approved'"
+                    class="table-button danger"
+                    type="button"
+                    @click="reviewWithdrawal(withdrawal, 'rejected')"
+                  >
+                    驳回
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <p
+            v-if="adminWithdrawals.length === 0"
+            class="empty-text"
+          >
+            暂无提现申请。
+          </p>
+        </section>
+      </section>
+
+      <section
         v-if="activeView === 'agent-sites'"
         class="view-stack"
       >
@@ -1885,6 +2063,145 @@ onMounted(() => {
           >
             暂无订单。买家在你的分站下单并支付后，会在这里显示订单和利润。
           </p>
+        </section>
+      </section>
+
+      <section
+        v-if="activeView === 'agent-finance'"
+        class="view-stack"
+      >
+        <div class="metric-grid">
+          <article class="metric-card">
+            <span>可提现余额</span>
+            <strong>￥{{ agentFinanceSummary.balance }}</strong>
+          </article>
+          <article class="metric-card">
+            <span>累计收益</span>
+            <strong>￥{{ agentFinanceSummary.totalProfit }}</strong>
+          </article>
+          <article class="metric-card">
+            <span>待处理提现</span>
+            <strong>￥{{ agentFinanceSummary.pendingWithdrawalAmount }}</strong>
+          </article>
+          <article class="metric-card">
+            <span>提现记录</span>
+            <strong>{{ agentWithdrawals.length }}</strong>
+          </article>
+        </div>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <h2>申请提现</h2>
+            <span>提交后余额会先冻结，管理员审核后完成打款</span>
+          </div>
+          <form
+            class="form-grid three"
+            @submit.prevent="createWithdrawal"
+          >
+            <label>
+              提现金额
+              <input
+                v-model.number="withdrawalForm.amount"
+                type="number"
+                min="0.01"
+                step="0.01"
+              >
+            </label>
+            <label>
+              收款方式
+              <select v-model="withdrawalForm.accountType">
+                <option value="alipay">
+                  支付宝
+                </option>
+                <option value="bank">
+                  银行卡
+                </option>
+                <option value="wechat">
+                  微信
+                </option>
+              </select>
+            </label>
+            <label>
+              收款姓名
+              <input v-model="withdrawalForm.accountName">
+            </label>
+            <label>
+              收款账号
+              <input v-model="withdrawalForm.accountNo">
+            </label>
+            <label>
+              备注
+              <input v-model="withdrawalForm.remark">
+            </label>
+            <button
+              class="solid-button"
+              type="submit"
+            >
+              提交提现
+            </button>
+          </form>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <h2>资金流水</h2>
+            <span>{{ agentFinanceTransactions.length }} 条流水</span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>类型</th>
+                <th>金额</th>
+                <th>余额</th>
+                <th>关联号</th>
+                <th>备注</th>
+                <th>时间</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="transaction in agentFinanceTransactions"
+                :key="transaction.id"
+              >
+                <td>{{ transaction.type }}</td>
+                <td>￥{{ transaction.amount }}</td>
+                <td>￥{{ transaction.balanceAfter }}</td>
+                <td>{{ transaction.referenceNo }}</td>
+                <td>{{ transaction.remark ?? '-' }}</td>
+                <td>{{ new Date(transaction.createdAt).toLocaleString() }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <h2>提现记录</h2>
+            <span>{{ agentWithdrawals.length }} 条记录</span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>金额</th>
+                <th>账号</th>
+                <th>状态</th>
+                <th>备注</th>
+                <th>申请时间</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="withdrawal in agentWithdrawals"
+                :key="withdrawal.id"
+              >
+                <td>￥{{ withdrawal.amount }}</td>
+                <td>{{ withdrawal.accountType }} / {{ withdrawal.accountName }} / {{ withdrawal.accountNo }}</td>
+                <td>{{ withdrawal.status }}</td>
+                <td>{{ withdrawal.reviewRemark ?? withdrawal.remark ?? '-' }}</td>
+                <td>{{ new Date(withdrawal.createdAt).toLocaleString() }}</td>
+              </tr>
+            </tbody>
+          </table>
         </section>
       </section>
     </main>

@@ -92,6 +92,22 @@ enum OrderStatus {
   failed
 }
 
+enum FinanceTransactionType {
+  order_profit
+  withdrawal_freeze
+  withdrawal_paid
+  withdrawal_reject
+  manual_adjust
+}
+
+enum WithdrawalStatus {
+  pending
+  approved
+  rejected
+  paid
+  cancelled
+}
+
 model User {
   id           BigInt        @id @default(autoincrement())
   username     String        @unique @db.VarChar(64)
@@ -111,6 +127,8 @@ model User {
   sites        Site[]
   capabilities UserCapability[]
   orders       Order[]       @relation("AgentOrders")
+  financeTransactions FinanceTransaction[]
+  withdrawals  Withdrawal[]
 
   @@map("users")
 }
@@ -404,6 +422,44 @@ model Payment {
 
   @@index([orderId])
   @@map("payments")
+}
+
+model FinanceTransaction {
+  id           BigInt                 @id @default(autoincrement())
+  userId       BigInt                 @map("user_id")
+  type         FinanceTransactionType
+  amount       Decimal                @db.Decimal(12, 2)
+  balanceAfter Decimal                @map("balance_after") @db.Decimal(12, 2)
+  referenceNo  String                 @unique @map("reference_no") @db.VarChar(128)
+  remark       String?                @db.VarChar(255)
+  metadataJson Json?                  @map("metadata_json")
+  createdAt    DateTime               @default(now()) @map("created_at")
+
+  user         User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("finance_transactions")
+}
+
+model Withdrawal {
+  id           BigInt           @id @default(autoincrement())
+  userId       BigInt           @map("user_id")
+  amount       Decimal          @db.Decimal(12, 2)
+  status       WithdrawalStatus @default(pending)
+  accountType  String           @map("account_type") @db.VarChar(32)
+  accountName  String           @map("account_name") @db.VarChar(96)
+  accountNo    String           @map("account_no") @db.VarChar(128)
+  remark       String?          @db.VarChar(255)
+  reviewRemark String?          @map("review_remark") @db.VarChar(255)
+  reviewedAt   DateTime?        @map("reviewed_at")
+  paidAt       DateTime?        @map("paid_at")
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
+
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("withdrawals")
 }
 
 model Template {

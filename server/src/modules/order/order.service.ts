@@ -4,11 +4,15 @@ import type { Decimal } from '@prisma/client/runtime/library';
 import type { AuthUser } from '../auth/auth.types';
 import { CAPABILITY_KEYS } from '../capability/capability.constants';
 import { PrismaService } from '../database/prisma.service';
+import { FinanceService } from '../finance/finance.service';
 import type { CreateOrderDto } from './dto/create-order.dto';
 
 @Injectable()
 export class OrderService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly financeService: FinanceService,
+  ) {}
 
   async createOrder(input: CreateOrderDto) {
     const productId = BigInt(input.productId);
@@ -387,6 +391,18 @@ export class OrderService {
         }),
       };
     });
+
+    if (result.order.agentUserId && result.order.agentProfit.gt(0)) {
+      await this.financeService.creditOrderProfit({
+        userId: result.order.agentUserId,
+        orderNo: result.order.orderNo,
+        amount: result.order.agentProfit,
+        metadata: {
+          orderId: result.order.id.toString(),
+          productId: result.order.productId.toString(),
+        },
+      });
+    }
 
     return {
       ...this.mapOrder(result.order, result.order.product),

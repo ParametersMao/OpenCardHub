@@ -6,6 +6,7 @@ import { CapabilityModule } from './modules/capability/capability.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
 import { ConfigCenterModule } from './modules/config-center/config-center.module';
 import { DatabaseModule } from './modules/database/database.module';
+import { FinanceModule } from './modules/finance/finance.module';
 import { HealthModule } from './modules/health/health.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { OrderModule } from './modules/order/order.module';
@@ -28,6 +29,7 @@ import { UserModule } from './modules/user/user.module';
     UserModule,
     CapabilityModule,
     CatalogModule,
+    FinanceModule,
     InventoryModule,
     OrderModule,
     PaymentModule,

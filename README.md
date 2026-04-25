@@ -158,6 +158,12 @@ Initial API surfaces:
 - `POST /api/agent/catalog/site-products`
 - `GET /api/agent/orders`
 - `GET /api/agent/orders/summary`
+- `GET /api/agent/finance/summary`
+- `GET /api/agent/finance/transactions`
+- `GET /api/agent/finance/withdrawals`
+- `POST /api/agent/finance/withdrawals`
+- `GET /api/finance/withdrawals`
+- `PATCH /api/finance/withdrawals/:id`
 - `GET /api/storefront`
 - `POST /api/storefront/orders`
 - `POST /api/storefront/orders/query`
