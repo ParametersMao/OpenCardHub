@@ -112,6 +112,10 @@ Initial API surfaces:
 - `GET /api/config/settings`
 - `PUT /api/config/settings`
 - `POST /api/config/resolve`
+- `GET /api/catalog/categories`
+- `POST /api/catalog/categories`
+- `GET /api/catalog/products`
+- `POST /api/catalog/products`
 
 ## Repository Status
 
