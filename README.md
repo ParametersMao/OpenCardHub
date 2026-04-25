@@ -57,8 +57,46 @@ In OpenCardHub, levels are privilege templates. Real access is resolved from con
 - [Roadmap](docs/ROADMAP.md)
 - [Open Source and Commercial Boundary](docs/COMMERCIAL.md)
 
+## Development
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Start infrastructure:
+
+```bash
+docker compose up -d
+```
+
+Start backend API:
+
+```bash
+npm run dev:server
+```
+
+Start admin frontend:
+
+```bash
+npm run dev:admin
+```
+
+Useful checks:
+
+```bash
+npm run build
+npm run lint
+```
+
+Initial local endpoints:
+
+- Backend health: `http://localhost:3000/api/health`
+- Admin frontend: `http://localhost:5173`
+
 ## Repository Status
 
-This repository is currently in product and architecture planning stage.
+This repository is currently in early scaffold stage.
 
 The first implementation milestone is to build a configurable MVP that includes product management, card inventory, Alipay payment, order delivery, V0/V1/V2 levels, and agent storefront creation.
