@@ -486,6 +486,11 @@ textarea {
   min-height: 16px;
 }
 
+.inline-toggle.compact {
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+
 .limit-input {
   max-width: 96px;
 }

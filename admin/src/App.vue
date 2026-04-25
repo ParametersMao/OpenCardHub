@@ -42,6 +42,7 @@ interface Product {
   minSalePrice: number;
   defaultWholesalePrice: number;
   stockCount: number;
+  allowSiteSale?: boolean;
   allowAgentEditPrice?: boolean;
   allowAgentEditName?: boolean;
   allowAgentEditDescription?: boolean;
@@ -143,6 +144,10 @@ const productForm = ref({
   defaultWholesalePrice: 0,
   salePrice: 0,
   minSalePrice: 0,
+  allowSiteSale: true,
+  allowAgentEditPrice: false,
+  allowAgentEditName: false,
+  allowAgentEditDescription: false,
 });
 const inventoryForm = ref({
   productId: '',
@@ -447,6 +452,22 @@ async function updateProductPrice(product: Product, salePrice: number) {
   await loadAll();
 }
 
+async function updateProductSwitch(
+  product: Product,
+  key:
+    | 'allowSiteSale'
+    | 'allowAgentEditPrice'
+    | 'allowAgentEditName'
+    | 'allowAgentEditDescription',
+  enabled: boolean,
+) {
+  await request(`/api/catalog/products/${product.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ [key]: enabled }),
+  });
+  await loadAll();
+}
+
 async function createProduct() {
   if (!productForm.value.categoryId || !productForm.value.name.trim()) {
     message.value = '请先选择分类并填写商品名称';
@@ -464,6 +485,10 @@ async function createProduct() {
     defaultWholesalePrice: 0,
     salePrice: 0,
     minSalePrice: 0,
+    allowSiteSale: true,
+    allowAgentEditPrice: false,
+    allowAgentEditName: false,
+    allowAgentEditDescription: false,
   };
   await loadAll();
 }
@@ -973,6 +998,34 @@ onMounted(() => {
                 step="0.01"
               >
             </label>
+            <label class="inline-toggle">
+              <input
+                v-model="productForm.allowSiteSale"
+                type="checkbox"
+              >
+              允许分站销售
+            </label>
+            <label class="inline-toggle">
+              <input
+                v-model="productForm.allowAgentEditPrice"
+                type="checkbox"
+              >
+              允许代理改价
+            </label>
+            <label class="inline-toggle">
+              <input
+                v-model="productForm.allowAgentEditName"
+                type="checkbox"
+              >
+              允许代理改名
+            </label>
+            <label class="inline-toggle">
+              <input
+                v-model="productForm.allowAgentEditDescription"
+                type="checkbox"
+              >
+              允许代理改描述
+            </label>
             <button
               class="solid-button"
               type="submit"
@@ -996,6 +1049,7 @@ onMounted(() => {
                 <th>进货价</th>
                 <th>库存</th>
                 <th>状态</th>
+                <th>代理配置</th>
                 <th>操作</th>
               </tr>
             </thead>
@@ -1024,6 +1078,64 @@ onMounted(() => {
                 <td>{{ product.defaultWholesalePrice }}</td>
                 <td>{{ product.stockCount }}</td>
                 <td>{{ product.status }}</td>
+                <td>
+                  <label class="inline-toggle compact">
+                    <input
+                      :checked="Boolean(product.allowSiteSale)"
+                      type="checkbox"
+                      @change="
+                        updateProductSwitch(
+                          product,
+                          'allowSiteSale',
+                          ($event.target as HTMLInputElement).checked,
+                        )
+                      "
+                    >
+                    分站销售
+                  </label>
+                  <label class="inline-toggle compact">
+                    <input
+                      :checked="Boolean(product.allowAgentEditPrice)"
+                      type="checkbox"
+                      @change="
+                        updateProductSwitch(
+                          product,
+                          'allowAgentEditPrice',
+                          ($event.target as HTMLInputElement).checked,
+                        )
+                      "
+                    >
+                    改价
+                  </label>
+                  <label class="inline-toggle compact">
+                    <input
+                      :checked="Boolean(product.allowAgentEditName)"
+                      type="checkbox"
+                      @change="
+                        updateProductSwitch(
+                          product,
+                          'allowAgentEditName',
+                          ($event.target as HTMLInputElement).checked,
+                        )
+                      "
+                    >
+                    改名
+                  </label>
+                  <label class="inline-toggle compact">
+                    <input
+                      :checked="Boolean(product.allowAgentEditDescription)"
+                      type="checkbox"
+                      @change="
+                        updateProductSwitch(
+                          product,
+                          'allowAgentEditDescription',
+                          ($event.target as HTMLInputElement).checked,
+                        )
+                      "
+                    >
+                    改描述
+                  </label>
+                </td>
                 <td>
                   <button
                     class="table-button"
