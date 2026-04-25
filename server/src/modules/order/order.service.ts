@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma, type Order, type Product } from '@prisma/client';
 import type { Decimal } from '@prisma/client/runtime/library';
+import type { AuthUser } from '../auth/auth.types';
 import { CAPABILITY_KEYS } from '../capability/capability.constants';
 import { PrismaService } from '../database/prisma.service';
 import type { CreateOrderDto } from './dto/create-order.dto';
@@ -154,6 +155,71 @@ export class OrderService {
     });
 
     return orders.map((order) => this.mapOrder(order, order.product));
+  }
+
+  async listAgentOrders(user: AuthUser) {
+    this.assertAgentUser(user);
+
+    const orders = await this.prisma.order.findMany({
+      where: {
+        agentUserId: BigInt(user.id),
+      },
+      orderBy: {
+        id: 'desc',
+      },
+      include: {
+        product: true,
+        site: true,
+      },
+    });
+
+    return orders.map((order) => ({
+      ...this.mapOrder(order, order.product),
+      siteName: order.site?.name,
+    }));
+  }
+
+  async getAgentOrderSummary(user: AuthUser) {
+    this.assertAgentUser(user);
+
+    const [allOrders, paidOrders] = await Promise.all([
+      this.prisma.order.aggregate({
+        where: {
+          agentUserId: BigInt(user.id),
+        },
+        _count: {
+          _all: true,
+        },
+        _sum: {
+          totalAmount: true,
+          agentProfit: true,
+          platformProfit: true,
+        },
+      }),
+      this.prisma.order.aggregate({
+        where: {
+          agentUserId: BigInt(user.id),
+          paymentStatus: 'paid',
+        },
+        _count: {
+          _all: true,
+        },
+        _sum: {
+          totalAmount: true,
+          agentProfit: true,
+          platformProfit: true,
+        },
+      }),
+    ]);
+
+    return {
+      totalOrders: allOrders._count._all,
+      paidOrders: paidOrders._count._all,
+      totalAmount: this.decimalToNumber(allOrders._sum.totalAmount),
+      paidAmount: this.decimalToNumber(paidOrders._sum.totalAmount),
+      agentProfit: this.decimalToNumber(paidOrders._sum.agentProfit),
+      platformProfit: this.decimalToNumber(paidOrders._sum.platformProfit),
+    };
   }
 
   async getPublicOrder(orderNo: string, buyerContact?: string) {
@@ -403,6 +469,16 @@ export class OrderService {
 
     const discountRate = (value as Record<string, unknown>).discountRate;
     return typeof discountRate === 'number' ? discountRate : 1;
+  }
+
+  private assertAgentUser(user: AuthUser) {
+    if (user.role !== 'agent') {
+      throw new BadRequestException('Only agent users can access agent orders.');
+    }
+  }
+
+  private decimalToNumber(value: Prisma.Decimal | null | undefined) {
+    return value?.toNumber() ?? 0;
   }
 
   private toPrismaJson(

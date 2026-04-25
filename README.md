@@ -156,6 +156,8 @@ Initial API surfaces:
 - `GET /api/agent/catalog/sites/:siteId/products`
 - `GET /api/agent/catalog/sites/:siteId/overrides`
 - `POST /api/agent/catalog/site-products`
+- `GET /api/agent/orders`
+- `GET /api/agent/orders/summary`
 - `GET /api/storefront`
 - `POST /api/storefront/orders`
 - `POST /api/storefront/orders/query`

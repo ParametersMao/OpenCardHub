@@ -8,7 +8,7 @@ type AdminViewKey =
   | 'catalog'
   | 'inventory'
   | 'sites';
-type AgentViewKey = 'agent-sites';
+type AgentViewKey = 'agent-sites' | 'agent-orders';
 type ViewKey = AdminViewKey | AgentViewKey;
 
 interface Capability {
@@ -98,6 +98,30 @@ interface StockSnapshot {
   counts: Record<string, number>;
 }
 
+interface AgentOrder {
+  id: string;
+  orderNo: string;
+  siteName?: string;
+  productName?: string;
+  quantity: number;
+  totalAmount: number;
+  agentProfit: number;
+  platformProfit: number;
+  paymentStatus: string;
+  deliveryStatus: string;
+  orderStatus: string;
+  createdAt: string;
+}
+
+interface AgentOrderSummary {
+  totalOrders: number;
+  paidOrders: number;
+  totalAmount: number;
+  paidAmount: number;
+  agentProfit: number;
+  platformProfit: number;
+}
+
 const adminNavItems: Array<{ key: AdminViewKey; label: string }> = [
   { key: 'overview', label: '总览' },
   { key: 'levels', label: '等级能力' },
@@ -108,6 +132,7 @@ const adminNavItems: Array<{ key: AdminViewKey; label: string }> = [
 ];
 const agentNavItems: Array<{ key: AgentViewKey; label: string }> = [
   { key: 'agent-sites', label: '我的分站' },
+  { key: 'agent-orders', label: '我的订单' },
 ];
 
 const activeView = ref<ViewKey>('overview');
@@ -123,6 +148,15 @@ const sites = ref<Site[]>([]);
 const agentSites = ref<Site[]>([]);
 const agentProducts = ref<Product[]>([]);
 const agentSiteOverrides = ref<Record<string, SiteProductOverride[]>>({});
+const agentOrders = ref<AgentOrder[]>([]);
+const agentOrderSummary = ref<AgentOrderSummary>({
+  totalOrders: 0,
+  paidOrders: 0,
+  totalAmount: 0,
+  paidAmount: 0,
+  agentProfit: 0,
+  platformProfit: 0,
+});
 const users = ref<User[]>([]);
 const stockSnapshots = ref<Record<string, StockSnapshot>>({});
 
@@ -314,13 +348,17 @@ async function loadAdminData() {
 }
 
 async function loadAgentData() {
-  const [mySites, availableProducts] = await Promise.all([
+  const [mySites, availableProducts, myOrders, orderSummary] = await Promise.all([
     request<Site[]>('/api/agent/sites'),
     request<Product[]>('/api/agent/catalog/products'),
+    request<AgentOrder[]>('/api/agent/orders'),
+    request<AgentOrderSummary>('/api/agent/orders/summary'),
   ]);
 
   agentSites.value = mySites;
   agentProducts.value = availableProducts;
+  agentOrders.value = myOrders;
+  agentOrderSummary.value = orderSummary;
   editingSites.value = Object.fromEntries(
     agentSites.value.map((site) => [
       site.id,
@@ -1778,6 +1816,74 @@ onMounted(() => {
             class="empty-text"
           >
             暂无分站。创建权限由主站管理员在 V1/V2 能力中配置。
+          </p>
+        </section>
+      </section>
+
+      <section
+        v-if="activeView === 'agent-orders'"
+        class="view-stack"
+      >
+        <div class="metric-grid">
+          <article class="metric-card">
+            <span>订单总数</span>
+            <strong>{{ agentOrderSummary.totalOrders }}</strong>
+          </article>
+          <article class="metric-card">
+            <span>已支付订单</span>
+            <strong>{{ agentOrderSummary.paidOrders }}</strong>
+          </article>
+          <article class="metric-card">
+            <span>已支付金额</span>
+            <strong>￥{{ agentOrderSummary.paidAmount }}</strong>
+          </article>
+          <article class="metric-card">
+            <span>我的利润</span>
+            <strong>￥{{ agentOrderSummary.agentProfit }}</strong>
+          </article>
+        </div>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <h2>订单明细</h2>
+            <span>平台利润 ￥{{ agentOrderSummary.platformProfit }}</span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>订单号</th>
+                <th>分站</th>
+                <th>商品</th>
+                <th>数量</th>
+                <th>金额</th>
+                <th>我的利润</th>
+                <th>支付</th>
+                <th>发货</th>
+                <th>创建时间</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="order in agentOrders"
+                :key="order.id"
+              >
+                <td>{{ order.orderNo }}</td>
+                <td>{{ order.siteName ?? '-' }}</td>
+                <td>{{ order.productName ?? '-' }}</td>
+                <td>{{ order.quantity }}</td>
+                <td>￥{{ order.totalAmount }}</td>
+                <td>￥{{ order.agentProfit }}</td>
+                <td>{{ order.paymentStatus }}</td>
+                <td>{{ order.deliveryStatus }}</td>
+                <td>{{ new Date(order.createdAt).toLocaleString() }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <p
+            v-if="agentOrders.length === 0"
+            class="empty-text"
+          >
+            暂无订单。买家在你的分站下单并支付后，会在这里显示订单和利润。
           </p>
         </section>
       </section>
