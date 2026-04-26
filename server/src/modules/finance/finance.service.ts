@@ -192,6 +192,26 @@ export class FinanceService {
     }));
   }
 
+  async getAdminSummary() {
+    const [pending, approved, paid, rejected] = await Promise.all([
+      this.aggregateWithdrawalsByStatus('pending'),
+      this.aggregateWithdrawalsByStatus('approved'),
+      this.aggregateWithdrawalsByStatus('paid'),
+      this.aggregateWithdrawalsByStatus('rejected'),
+    ]);
+
+    return {
+      pendingCount: pending._count._all,
+      pendingAmount: this.decimalToNumber(pending._sum.amount),
+      approvedCount: approved._count._all,
+      approvedAmount: this.decimalToNumber(approved._sum.amount),
+      paidCount: paid._count._all,
+      paidAmount: this.decimalToNumber(paid._sum.amount),
+      rejectedCount: rejected._count._all,
+      rejectedAmount: this.decimalToNumber(rejected._sum.amount),
+    };
+  }
+
   async reviewWithdrawal(id: string, input: ReviewWithdrawalDto) {
     const withdrawal = await this.prisma.$transaction(async (tx) => {
       const current = await tx.withdrawal.findUnique({
@@ -207,6 +227,12 @@ export class FinanceService {
       if (current.status === 'paid' || current.status === 'rejected') {
         throw new BadRequestException('Withdrawal is already finished.');
       }
+
+      if (current.status === input.status) {
+        return current;
+      }
+
+      this.assertWithdrawalTransition(current.status, input.status);
 
       if (input.status === 'rejected') {
         const user = await tx.user.update({
@@ -259,6 +285,42 @@ export class FinanceService {
     });
 
     return this.mapWithdrawal(withdrawal);
+  }
+
+  private aggregateWithdrawalsByStatus(status: Withdrawal['status']) {
+    return this.prisma.withdrawal.aggregate({
+      where: {
+        status,
+      },
+      _count: {
+        _all: true,
+      },
+      _sum: {
+        amount: true,
+      },
+    });
+  }
+
+  private assertWithdrawalTransition(
+    current: Withdrawal['status'],
+    next: ReviewWithdrawalDto['status'],
+  ) {
+    const allowedTransitions: Record<
+      Withdrawal['status'],
+      Array<ReviewWithdrawalDto['status']>
+    > = {
+      pending: ['approved', 'rejected'],
+      approved: ['paid', 'rejected'],
+      rejected: [],
+      paid: [],
+      cancelled: [],
+    };
+
+    if (!allowedTransitions[current].includes(next)) {
+      throw new BadRequestException(
+        `Cannot change withdrawal status from ${current} to ${next}.`,
+      );
+    }
   }
 
   private async getUserBalance(tx: Prisma.TransactionClient, userId: bigint) {

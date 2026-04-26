@@ -162,6 +162,7 @@ Initial API surfaces:
 - `GET /api/agent/finance/transactions`
 - `GET /api/agent/finance/withdrawals`
 - `POST /api/agent/finance/withdrawals`
+- `GET /api/finance/summary`
 - `GET /api/finance/withdrawals`
 - `PATCH /api/finance/withdrawals/:id`
 - `GET /api/storefront`

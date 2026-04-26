@@ -153,6 +153,17 @@ interface Withdrawal {
   createdAt: string;
 }
 
+interface AdminFinanceSummary {
+  pendingCount: number;
+  pendingAmount: number;
+  approvedCount: number;
+  approvedAmount: number;
+  paidCount: number;
+  paidAmount: number;
+  rejectedCount: number;
+  rejectedAmount: number;
+}
+
 const adminNavItems: Array<{ key: AdminViewKey; label: string }> = [
   { key: 'overview', label: '总览' },
   { key: 'levels', label: '等级能力' },
@@ -190,6 +201,16 @@ const agentFinanceSummary = ref<FinanceSummary>({
 const agentFinanceTransactions = ref<FinanceTransaction[]>([]);
 const agentWithdrawals = ref<Withdrawal[]>([]);
 const adminWithdrawals = ref<Withdrawal[]>([]);
+const adminFinanceSummary = ref<AdminFinanceSummary>({
+  pendingCount: 0,
+  pendingAmount: 0,
+  approvedCount: 0,
+  approvedAmount: 0,
+  paidCount: 0,
+  paidAmount: 0,
+  rejectedCount: 0,
+  rejectedAmount: 0,
+});
 const agentOrderSummary = ref<AgentOrderSummary>({
   totalOrders: 0,
   paidOrders: 0,
@@ -379,6 +400,7 @@ async function loadAdminData() {
     productList,
     siteList,
     withdrawalList,
+    financeSummary,
   ] = await Promise.all([
     request<Level[]>('/api/capabilities/levels/persisted'),
     request<string[]>('/api/capabilities/keys'),
@@ -387,6 +409,7 @@ async function loadAdminData() {
     request<Product[]>('/api/catalog/products'),
     request<Site[]>('/api/sites'),
     request<Withdrawal[]>('/api/finance/withdrawals'),
+    request<AdminFinanceSummary>('/api/finance/summary'),
   ]);
 
   levels.value = persistedLevels;
@@ -396,6 +419,7 @@ async function loadAdminData() {
   products.value = productList;
   sites.value = siteList;
   adminWithdrawals.value = withdrawalList;
+  adminFinanceSummary.value = financeSummary;
 }
 
 async function loadAgentData() {
@@ -1606,6 +1630,25 @@ onMounted(() => {
         v-if="activeView === 'finance'"
         class="view-stack"
       >
+        <div class="metric-grid">
+          <article class="metric-card">
+            <span>待审核提现</span>
+            <strong>{{ adminFinanceSummary.pendingCount }}</strong>
+          </article>
+          <article class="metric-card">
+            <span>待审核金额</span>
+            <strong>￥{{ adminFinanceSummary.pendingAmount }}</strong>
+          </article>
+          <article class="metric-card">
+            <span>待打款金额</span>
+            <strong>￥{{ adminFinanceSummary.approvedAmount }}</strong>
+          </article>
+          <article class="metric-card">
+            <span>已打款金额</span>
+            <strong>￥{{ adminFinanceSummary.paidAmount }}</strong>
+          </article>
+        </div>
+
         <section class="panel">
           <div class="panel-heading">
             <h2>提现审核</h2>
@@ -1644,7 +1687,7 @@ onMounted(() => {
                     通过
                   </button>
                   <button
-                    v-if="withdrawal.status === 'pending' || withdrawal.status === 'approved'"
+                    v-if="withdrawal.status === 'approved'"
                     class="table-button"
                     type="button"
                     @click="reviewWithdrawal(withdrawal, 'paid')"

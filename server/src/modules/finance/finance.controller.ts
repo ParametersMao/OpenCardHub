@@ -13,6 +13,11 @@ export class FinanceController {
     return this.financeService.listWithdrawals();
   }
 
+  @Get('summary')
+  getSummary() {
+    return this.financeService.getAdminSummary();
+  }
+
   @Patch('withdrawals/:id')
   reviewWithdrawal(
     @Param('id') id: string,
