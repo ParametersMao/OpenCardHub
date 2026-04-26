@@ -323,6 +323,10 @@ h1 {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.form-grid.four {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 label {
   display: grid;
   gap: 7px;
@@ -515,6 +519,21 @@ textarea {
   background: rgba(183, 71, 42, 0.08);
 }
 
+.table-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin: 12px 0 18px;
+  color: #64706b;
+  font-size: 13px;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -544,6 +563,7 @@ td {
   .level-grid,
   .form-grid,
   .form-grid.three,
+  .form-grid.four,
   .product-grid {
     grid-template-columns: 1fr;
   }

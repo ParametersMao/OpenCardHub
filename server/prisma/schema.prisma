@@ -108,6 +108,13 @@ enum WithdrawalStatus {
   cancelled
 }
 
+enum SettlementStatus {
+  draft
+  confirmed
+  archived
+  voided
+}
+
 model User {
   id           BigInt        @id @default(autoincrement())
   username     String        @unique @db.VarChar(64)
@@ -129,6 +136,7 @@ model User {
   orders       Order[]       @relation("AgentOrders")
   financeTransactions FinanceTransaction[]
   withdrawals  Withdrawal[]
+  settlements  Settlement[]
 
   @@map("users")
 }
@@ -460,6 +468,35 @@ model Withdrawal {
 
   @@index([userId])
   @@map("withdrawals")
+}
+
+model Settlement {
+  id                BigInt           @id @default(autoincrement())
+  settlementNo      String           @unique @map("settlement_no") @db.VarChar(64)
+  settlementScope   String           @map("settlement_scope") @db.VarChar(64)
+  userId            BigInt?          @map("user_id")
+  status            SettlementStatus @default(draft)
+  periodStart       DateTime         @map("period_start")
+  periodEnd         DateTime         @map("period_end")
+  paidOrderCount    Int              @default(0) @map("paid_order_count")
+  paidAmount        Decimal          @default(0) @map("paid_amount") @db.Decimal(12, 2)
+  costAmount        Decimal          @default(0) @map("cost_amount") @db.Decimal(12, 2)
+  agentProfit       Decimal          @default(0) @map("agent_profit") @db.Decimal(12, 2)
+  platformProfit    Decimal          @default(0) @map("platform_profit") @db.Decimal(12, 2)
+  withdrawalAmount  Decimal          @default(0) @map("withdrawal_amount") @db.Decimal(12, 2)
+  snapshotJson      Json             @map("snapshot_json")
+  remark            String?          @db.VarChar(255)
+  confirmedAt       DateTime?        @map("confirmed_at")
+  voidedAt          DateTime?        @map("voided_at")
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+
+  user              User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([settlementScope, periodStart, periodEnd, status])
+  @@index([status])
+  @@index([periodStart, periodEnd])
+  @@map("settlements")
 }
 
 model Template {

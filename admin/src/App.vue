@@ -153,6 +153,103 @@ interface Withdrawal {
   createdAt: string;
 }
 
+interface SettlementSnapshot {
+  generatedAt?: string;
+  scope?: string;
+  period?: {
+    startDate?: string;
+    endDate?: string;
+  };
+  orders?: {
+    paidCount?: number;
+    paidAmount?: number;
+    costAmount?: number;
+    agentProfit?: number;
+    platformProfit?: number;
+  };
+  withdrawals?: {
+    paidCount?: number;
+    paidAmount?: number;
+  };
+}
+
+interface Settlement {
+  id: string;
+  settlementNo: string;
+  settlementScope: string;
+  userId?: string;
+  username?: string;
+  status: string;
+  periodStart: string;
+  periodEnd: string;
+  paidOrderCount: number;
+  paidAmount: number;
+  costAmount: number;
+  agentProfit: number;
+  platformProfit: number;
+  withdrawalAmount: number;
+  snapshot?: SettlementSnapshot;
+  remark?: string;
+  confirmedAt?: string;
+  voidedAt?: string;
+  createdAt: string;
+}
+
+interface AuditLog {
+  id: string;
+  userId?: string;
+  action: string;
+  targetType?: string;
+  targetId?: string;
+  ip?: string;
+  detail?: Record<string, unknown>;
+  createdAt: string;
+}
+
+interface PaginationMeta {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+interface PaginatedResult<T> {
+  items: T[];
+  meta: PaginationMeta;
+}
+
+interface SettlementDetailOrder {
+  id: string;
+  orderNo: string;
+  agentUsername?: string;
+  siteName?: string;
+  productName?: string;
+  quantity: number;
+  totalAmount: number;
+  costAmount: number;
+  agentProfit: number;
+  platformProfit: number;
+  paymentMethod?: string;
+  paidAt?: string;
+}
+
+interface SettlementDetailWithdrawal {
+  id: string;
+  username: string;
+  amount: number;
+  accountType: string;
+  accountName: string;
+  accountNo: string;
+  reviewRemark?: string;
+  paidAt?: string;
+}
+
+interface SettlementDetails {
+  settlement: Settlement;
+  orders: PaginatedResult<SettlementDetailOrder>;
+  withdrawals: PaginatedResult<SettlementDetailWithdrawal>;
+}
+
 interface AdminFinanceSummary {
   pendingCount: number;
   pendingAmount: number;
@@ -162,6 +259,55 @@ interface AdminFinanceSummary {
   paidAmount: number;
   rejectedCount: number;
   rejectedAmount: number;
+}
+
+interface AdminFinanceReport {
+  range: {
+    startDate?: string;
+    endDate?: string;
+  };
+  orders: {
+    paidCount: number;
+    paidAmount: number;
+    costAmount: number;
+    agentProfit: number;
+    platformProfit: number;
+    directCount: number;
+    directAmount: number;
+    agentCount: number;
+    agentAmount: number;
+  };
+  withdrawals: {
+    pendingCount: number;
+    pendingAmount: number;
+    approvedCount: number;
+    approvedAmount: number;
+    paidCount: number;
+    paidAmount: number;
+    rejectedCount: number;
+    rejectedAmount: number;
+  };
+}
+
+interface AgentFinanceReport {
+  range: {
+    startDate?: string;
+    endDate?: string;
+  };
+  orders: {
+    paidCount: number;
+    paidAmount: number;
+    agentProfit: number;
+    platformProfit: number;
+  };
+  profit: {
+    creditedCount: number;
+    creditedAmount: number;
+  };
+  withdrawals: {
+    paidCount: number;
+    paidAmount: number;
+  };
 }
 
 const adminNavItems: Array<{ key: AdminViewKey; label: string }> = [
@@ -201,6 +347,46 @@ const agentFinanceSummary = ref<FinanceSummary>({
 const agentFinanceTransactions = ref<FinanceTransaction[]>([]);
 const agentWithdrawals = ref<Withdrawal[]>([]);
 const adminWithdrawals = ref<Withdrawal[]>([]);
+const adminSettlements = ref<Settlement[]>([]);
+const auditLogs = ref<PaginatedResult<AuditLog>>({
+  items: [],
+  meta: {
+    page: 1,
+    pageSize: 20,
+    total: 0,
+    totalPages: 1,
+  },
+});
+const agentSettlements = ref<Settlement[]>([]);
+const expandedSettlementId = ref('');
+const expandedAgentSettlementId = ref('');
+const settlementDetails = ref<Record<string, SettlementDetails>>({});
+const agentSettlementDetails = ref<Record<string, SettlementDetails>>({});
+const auditLogFilter = ref({
+  action: '',
+  targetType: '',
+  targetId: '',
+  page: 1,
+  pageSize: 20,
+});
+const settlementDetailPagination = ref<
+  Record<
+    string,
+    {
+      orderPage: number;
+      withdrawalPage: number;
+    }
+  >
+>({});
+const agentSettlementDetailPagination = ref<
+  Record<
+    string,
+    {
+      orderPage: number;
+      withdrawalPage: number;
+    }
+  >
+>({});
 const adminFinanceSummary = ref<AdminFinanceSummary>({
   pendingCount: 0,
   pendingAmount: 0,
@@ -210,6 +396,47 @@ const adminFinanceSummary = ref<AdminFinanceSummary>({
   paidAmount: 0,
   rejectedCount: 0,
   rejectedAmount: 0,
+});
+const adminFinanceReport = ref<AdminFinanceReport>({
+  range: {},
+  orders: {
+    paidCount: 0,
+    paidAmount: 0,
+    costAmount: 0,
+    agentProfit: 0,
+    platformProfit: 0,
+    directCount: 0,
+    directAmount: 0,
+    agentCount: 0,
+    agentAmount: 0,
+  },
+  withdrawals: {
+    pendingCount: 0,
+    pendingAmount: 0,
+    approvedCount: 0,
+    approvedAmount: 0,
+    paidCount: 0,
+    paidAmount: 0,
+    rejectedCount: 0,
+    rejectedAmount: 0,
+  },
+});
+const agentFinanceReport = ref<AgentFinanceReport>({
+  range: {},
+  orders: {
+    paidCount: 0,
+    paidAmount: 0,
+    agentProfit: 0,
+    platformProfit: 0,
+  },
+  profit: {
+    creditedCount: 0,
+    creditedAmount: 0,
+  },
+  withdrawals: {
+    paidCount: 0,
+    paidAmount: 0,
+  },
 });
 const agentOrderSummary = ref<AgentOrderSummary>({
   totalOrders: 0,
@@ -280,6 +507,16 @@ const withdrawalForm = ref({
   accountNo: '',
   remark: '',
 });
+const financeReportFilter = ref({
+  startDate: '',
+  endDate: '',
+});
+const settlementForm = ref({
+  userId: '',
+  startDate: '',
+  endDate: '',
+  remark: '',
+});
 const editingSites = ref<Record<string, Partial<Site>>>({});
 
 const isAdmin = computed(() => currentUser.value?.role === 'admin');
@@ -289,6 +526,14 @@ const currentViewLabel = computed(
 );
 const agentUsers = computed(() =>
   users.value.filter((user) => user.role === 'agent' || user.levelCode !== 'V0'),
+);
+const expandedSettlement = computed(() =>
+  adminSettlements.value.find((settlement) => settlement.id === expandedSettlementId.value),
+);
+const expandedAgentSettlement = computed(() =>
+  agentSettlements.value.find(
+    (settlement) => settlement.id === expandedAgentSettlementId.value,
+  ),
 );
 const totals = computed(() => [
   { label: '等级模板', value: levels.value.length },
@@ -321,6 +566,79 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   }
 
   return response.json() as Promise<T>;
+}
+
+function buildReportQuery() {
+  const params = new globalThis.URLSearchParams();
+  if (financeReportFilter.value.startDate) {
+    params.set('startDate', `${financeReportFilter.value.startDate}T00:00:00.000Z`);
+  }
+  if (financeReportFilter.value.endDate) {
+    params.set('endDate', `${financeReportFilter.value.endDate}T23:59:59.999Z`);
+  }
+  const query = params.toString();
+  return query ? `?${query}` : '';
+}
+
+function buildAuditLogQuery() {
+  const params = new globalThis.URLSearchParams();
+  params.set('page', String(auditLogFilter.value.page));
+  params.set('pageSize', String(auditLogFilter.value.pageSize));
+  if (auditLogFilter.value.action.trim()) {
+    params.set('action', auditLogFilter.value.action.trim());
+  }
+  if (auditLogFilter.value.targetType.trim()) {
+    params.set('targetType', auditLogFilter.value.targetType.trim());
+  }
+  if (auditLogFilter.value.targetId.trim()) {
+    params.set('targetId', auditLogFilter.value.targetId.trim());
+  }
+  return `?${params.toString()}`;
+}
+
+function buildSettlementDetailsQuery(
+  pagination: { orderPage: number; withdrawalPage: number } | undefined,
+) {
+  const params = new globalThis.URLSearchParams();
+  params.set('orderPage', String(pagination?.orderPage ?? 1));
+  params.set('orderPageSize', '10');
+  params.set('withdrawalPage', String(pagination?.withdrawalPage ?? 1));
+  params.set('withdrawalPageSize', '10');
+  return `?${params.toString()}`;
+}
+
+async function loadAuditLogs() {
+  auditLogs.value = await request<PaginatedResult<AuditLog>>(
+    `/api/finance/audit-logs${buildAuditLogQuery()}`,
+  );
+}
+
+async function applyAuditLogFilter() {
+  auditLogFilter.value.page = 1;
+  await loadAuditLogs();
+}
+
+async function changeAuditLogPage(delta: number) {
+  const nextPage = auditLogFilter.value.page + delta;
+  if (nextPage < 1 || nextPage > auditLogs.value.meta.totalPages) {
+    return;
+  }
+
+  auditLogFilter.value.page = nextPage;
+  await loadAuditLogs();
+}
+
+async function loadFinanceReports() {
+  if (isAdmin.value) {
+    adminFinanceReport.value = await request<AdminFinanceReport>(
+      `/api/finance/reports/summary${buildReportQuery()}`,
+    );
+    return;
+  }
+
+  agentFinanceReport.value = await request<AgentFinanceReport>(
+    `/api/agent/finance/reports/summary${buildReportQuery()}`,
+  );
 }
 
 async function login() {
@@ -400,7 +718,10 @@ async function loadAdminData() {
     productList,
     siteList,
     withdrawalList,
+    settlementList,
+    auditLogList,
     financeSummary,
+    financeReport,
   ] = await Promise.all([
     request<Level[]>('/api/capabilities/levels/persisted'),
     request<string[]>('/api/capabilities/keys'),
@@ -409,7 +730,10 @@ async function loadAdminData() {
     request<Product[]>('/api/catalog/products'),
     request<Site[]>('/api/sites'),
     request<Withdrawal[]>('/api/finance/withdrawals'),
+    request<Settlement[]>('/api/finance/settlements'),
+    request<PaginatedResult<AuditLog>>('/api/finance/audit-logs?page=1&pageSize=20'),
     request<AdminFinanceSummary>('/api/finance/summary'),
+    request<AdminFinanceReport>('/api/finance/reports/summary'),
   ]);
 
   levels.value = persistedLevels;
@@ -419,7 +743,10 @@ async function loadAdminData() {
   products.value = productList;
   sites.value = siteList;
   adminWithdrawals.value = withdrawalList;
+  adminSettlements.value = settlementList;
+  auditLogs.value = auditLogList;
   adminFinanceSummary.value = financeSummary;
+  adminFinanceReport.value = financeReport;
 }
 
 async function loadAgentData() {
@@ -431,6 +758,8 @@ async function loadAgentData() {
     financeSummary,
     financeTransactions,
     withdrawals,
+    settlements,
+    financeReport,
   ] = await Promise.all([
       request<Site[]>('/api/agent/sites'),
       request<Product[]>('/api/agent/catalog/products'),
@@ -439,6 +768,8 @@ async function loadAgentData() {
       request<FinanceSummary>('/api/agent/finance/summary'),
       request<FinanceTransaction[]>('/api/agent/finance/transactions'),
       request<Withdrawal[]>('/api/agent/finance/withdrawals'),
+      request<Settlement[]>('/api/agent/finance/settlements'),
+      request<AgentFinanceReport>('/api/agent/finance/reports/summary'),
     ]);
 
   agentSites.value = mySites;
@@ -448,6 +779,8 @@ async function loadAgentData() {
   agentFinanceSummary.value = financeSummary;
   agentFinanceTransactions.value = financeTransactions;
   agentWithdrawals.value = withdrawals;
+  agentSettlements.value = settlements;
+  agentFinanceReport.value = financeReport;
   editingSites.value = Object.fromEntries(
     agentSites.value.map((site) => [
       site.id,
@@ -821,6 +1154,182 @@ async function reviewWithdrawal(
   });
   message.value = '提现状态已更新';
   await loadAll();
+}
+
+async function createSettlement() {
+  if (!settlementForm.value.startDate || !settlementForm.value.endDate) {
+    message.value = '请选择结算周期';
+    return;
+  }
+
+  await request('/api/finance/settlements', {
+    method: 'POST',
+    body: JSON.stringify({
+      startDate: `${settlementForm.value.startDate}T00:00:00.000Z`,
+      endDate: `${settlementForm.value.endDate}T23:59:59.999Z`,
+      userId: settlementForm.value.userId || undefined,
+      remark: settlementForm.value.remark || undefined,
+    }),
+  });
+  settlementForm.value = {
+    userId: '',
+    startDate: '',
+    endDate: '',
+    remark: '',
+  };
+  message.value = '结算单已生成，请确认金额后再标记确认';
+  await loadAll();
+}
+
+async function reviewSettlement(
+  settlement: Settlement,
+  status: 'confirmed' | 'archived' | 'voided',
+) {
+  await request(`/api/finance/settlements/${settlement.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      status,
+    }),
+  });
+  message.value = '结算单状态已更新';
+  await loadAll();
+}
+
+async function exportSettlements() {
+  const response = await fetch('/api/finance/settlements/export', {
+    headers: {
+      ...(accessToken.value
+        ? { Authorization: `Bearer ${accessToken.value}` }
+        : {}),
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+
+  const csv = await response.blob();
+  const url = globalThis.URL.createObjectURL(csv);
+  const link = globalThis.document.createElement('a');
+  link.href = url;
+  link.download = `opencardhub-settlements-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.click();
+  globalThis.URL.revokeObjectURL(url);
+}
+
+function formatAuditDetail(detail?: Record<string, unknown>) {
+  return globalThis.JSON.stringify(detail ?? {});
+}
+
+function toggleSettlementSnapshot(settlementId: string) {
+  expandedSettlementId.value =
+    expandedSettlementId.value === settlementId ? '' : settlementId;
+}
+
+function toggleAgentSettlementSnapshot(settlementId: string) {
+  expandedAgentSettlementId.value =
+    expandedAgentSettlementId.value === settlementId ? '' : settlementId;
+}
+
+async function loadSettlementDetails(settlementId: string) {
+  expandedSettlementId.value =
+    expandedSettlementId.value === settlementId ? '' : settlementId;
+
+  if (expandedSettlementId.value && !settlementDetails.value[settlementId]) {
+    settlementDetailPagination.value[settlementId] = {
+      orderPage: 1,
+      withdrawalPage: 1,
+    };
+    settlementDetails.value[settlementId] = await request<SettlementDetails>(
+      `/api/finance/settlements/${settlementId}/details${buildSettlementDetailsQuery(
+        settlementDetailPagination.value[settlementId],
+      )}`,
+    );
+  }
+}
+
+async function loadAgentSettlementDetails(settlementId: string) {
+  expandedAgentSettlementId.value =
+    expandedAgentSettlementId.value === settlementId ? '' : settlementId;
+
+  if (
+    expandedAgentSettlementId.value &&
+    !agentSettlementDetails.value[settlementId]
+  ) {
+    agentSettlementDetailPagination.value[settlementId] = {
+      orderPage: 1,
+      withdrawalPage: 1,
+    };
+    agentSettlementDetails.value[settlementId] =
+      await request<SettlementDetails>(
+        `/api/agent/finance/settlements/${settlementId}/details${buildSettlementDetailsQuery(
+          agentSettlementDetailPagination.value[settlementId],
+        )}`,
+      );
+  }
+}
+
+async function changeSettlementDetailPage(
+  settlementId: string,
+  type: 'orders' | 'withdrawals',
+  delta: number,
+) {
+  const current = settlementDetails.value[settlementId];
+  if (!current) {
+    return;
+  }
+
+  const pagination = settlementDetailPagination.value[settlementId] ?? {
+    orderPage: 1,
+    withdrawalPage: 1,
+  };
+  const meta = current[type].meta;
+  const nextPage = meta.page + delta;
+  if (nextPage < 1 || nextPage > meta.totalPages) {
+    return;
+  }
+
+  settlementDetailPagination.value[settlementId] = {
+    ...pagination,
+    [type === 'orders' ? 'orderPage' : 'withdrawalPage']: nextPage,
+  };
+  settlementDetails.value[settlementId] = await request<SettlementDetails>(
+    `/api/finance/settlements/${settlementId}/details${buildSettlementDetailsQuery(
+      settlementDetailPagination.value[settlementId],
+    )}`,
+  );
+}
+
+async function changeAgentSettlementDetailPage(
+  settlementId: string,
+  type: 'orders' | 'withdrawals',
+  delta: number,
+) {
+  const current = agentSettlementDetails.value[settlementId];
+  if (!current) {
+    return;
+  }
+
+  const pagination = agentSettlementDetailPagination.value[settlementId] ?? {
+    orderPage: 1,
+    withdrawalPage: 1,
+  };
+  const meta = current[type].meta;
+  const nextPage = meta.page + delta;
+  if (nextPage < 1 || nextPage > meta.totalPages) {
+    return;
+  }
+
+  agentSettlementDetailPagination.value[settlementId] = {
+    ...pagination,
+    [type === 'orders' ? 'orderPage' : 'withdrawalPage']: nextPage,
+  };
+  agentSettlementDetails.value[settlementId] =
+    await request<SettlementDetails>(
+      `/api/agent/finance/settlements/${settlementId}/details${buildSettlementDetailsQuery(
+        agentSettlementDetailPagination.value[settlementId],
+      )}`,
+    );
 }
 
 function storefrontPreviewUrl(site: Site) {
@@ -1651,6 +2160,448 @@ onMounted(() => {
 
         <section class="panel">
           <div class="panel-heading">
+            <h2>本期对账</h2>
+            <span>按支付时间汇总订单利润，按申请时间汇总提现</span>
+          </div>
+          <form
+            class="form-grid three"
+            @submit.prevent="loadFinanceReports"
+          >
+            <label>
+              开始日期
+              <input
+                v-model="financeReportFilter.startDate"
+                type="date"
+              >
+            </label>
+            <label>
+              结束日期
+              <input
+                v-model="financeReportFilter.endDate"
+                type="date"
+              >
+            </label>
+            <button
+              class="solid-button"
+              type="submit"
+            >
+              刷新对账
+            </button>
+          </form>
+          <div class="metric-grid compact">
+            <article class="metric-card">
+              <span>已支付订单</span>
+              <strong>{{ adminFinanceReport.orders.paidCount }}</strong>
+            </article>
+            <article class="metric-card">
+              <span>成交金额</span>
+              <strong>￥{{ adminFinanceReport.orders.paidAmount }}</strong>
+            </article>
+            <article class="metric-card">
+              <span>代理分润</span>
+              <strong>￥{{ adminFinanceReport.orders.agentProfit }}</strong>
+            </article>
+            <article class="metric-card">
+              <span>平台利润</span>
+              <strong>￥{{ adminFinanceReport.orders.platformProfit }}</strong>
+            </article>
+            <article class="metric-card">
+              <span>直销订单</span>
+              <strong>{{ adminFinanceReport.orders.directCount }}</strong>
+            </article>
+            <article class="metric-card">
+              <span>分站订单</span>
+              <strong>{{ adminFinanceReport.orders.agentCount }}</strong>
+            </article>
+            <article class="metric-card">
+              <span>本期已打款</span>
+              <strong>￥{{ adminFinanceReport.withdrawals.paidAmount }}</strong>
+            </article>
+            <article class="metric-card">
+              <span>本期待审核</span>
+              <strong>￥{{ adminFinanceReport.withdrawals.pendingAmount }}</strong>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <h2>结算单</h2>
+            <span>生成后会锁定周期快照，确认前请核对订单、分润和提现金额</span>
+            <button
+              class="table-button"
+              type="button"
+              @click="exportSettlements"
+            >
+              导出 CSV
+            </button>
+          </div>
+          <form
+            class="form-grid four"
+            @submit.prevent="createSettlement"
+          >
+            <label>
+              结算对象
+              <select v-model="settlementForm.userId">
+                <option value="">
+                  全平台
+                </option>
+                <option
+                  v-for="user in agentUsers"
+                  :key="user.id"
+                  :value="user.id"
+                >
+                  {{ user.username }} / {{ user.levelCode }}
+                </option>
+              </select>
+            </label>
+            <label>
+              开始日期
+              <input
+                v-model="settlementForm.startDate"
+                type="date"
+              >
+            </label>
+            <label>
+              结束日期
+              <input
+                v-model="settlementForm.endDate"
+                type="date"
+              >
+            </label>
+            <label>
+              备注
+              <input v-model="settlementForm.remark">
+            </label>
+            <button
+              class="solid-button"
+              type="submit"
+            >
+              生成结算单
+            </button>
+          </form>
+          <table>
+            <thead>
+              <tr>
+                <th>结算号</th>
+                <th>对象</th>
+                <th>周期</th>
+                <th>状态</th>
+                <th>订单</th>
+                <th>成交</th>
+                <th>代理分润</th>
+                <th>平台利润</th>
+                <th>已打款</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="settlement in adminSettlements"
+                :key="settlement.id"
+              >
+                <td>{{ settlement.settlementNo }}</td>
+                <td>{{ settlement.username ?? settlement.settlementScope }}</td>
+                <td>
+                  {{ new Date(settlement.periodStart).toLocaleDateString() }}
+                  -
+                  {{ new Date(settlement.periodEnd).toLocaleDateString() }}
+                </td>
+                <td>{{ settlement.status }}</td>
+                <td>{{ settlement.paidOrderCount }}</td>
+                <td>￥{{ settlement.paidAmount }}</td>
+                <td>￥{{ settlement.agentProfit }}</td>
+                <td>￥{{ settlement.platformProfit }}</td>
+                <td>￥{{ settlement.withdrawalAmount }}</td>
+                <td>
+                  <button
+                    class="table-button"
+                    type="button"
+                    @click="toggleSettlementSnapshot(settlement.id)"
+                  >
+                    快照
+                  </button>
+                  <button
+                    class="table-button"
+                    type="button"
+                    @click="loadSettlementDetails(settlement.id)"
+                  >
+                    明细
+                  </button>
+                  <button
+                    v-if="settlement.status === 'draft'"
+                    class="table-button"
+                    type="button"
+                    @click="reviewSettlement(settlement, 'confirmed')"
+                  >
+                    确认
+                  </button>
+                  <button
+                    v-if="settlement.status === 'confirmed'"
+                    class="table-button"
+                    type="button"
+                    @click="reviewSettlement(settlement, 'archived')"
+                  >
+                    归档
+                  </button>
+                  <button
+                    v-if="settlement.status === 'draft' || settlement.status === 'confirmed'"
+                    class="table-button danger"
+                    type="button"
+                    @click="reviewSettlement(settlement, 'voided')"
+                  >
+                    作废
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div
+            v-if="expandedSettlement"
+            class="settlement-snapshot"
+          >
+            <div class="panel-heading subtle">
+              <h3>结算快照：{{ expandedSettlement.settlementNo }}</h3>
+              <span>
+                生成于
+                {{ expandedSettlement.snapshot?.generatedAt ? new Date(expandedSettlement.snapshot.generatedAt).toLocaleString() : '-' }}
+              </span>
+            </div>
+            <div class="metric-grid compact">
+              <article class="metric-card">
+                <span>快照订单数</span>
+                <strong>{{ expandedSettlement.snapshot?.orders?.paidCount ?? expandedSettlement.paidOrderCount }}</strong>
+              </article>
+              <article class="metric-card">
+                <span>快照成交</span>
+                <strong>￥{{ expandedSettlement.snapshot?.orders?.paidAmount ?? expandedSettlement.paidAmount }}</strong>
+              </article>
+              <article class="metric-card">
+                <span>快照成本</span>
+                <strong>￥{{ expandedSettlement.snapshot?.orders?.costAmount ?? expandedSettlement.costAmount }}</strong>
+              </article>
+              <article class="metric-card">
+                <span>快照代理分润</span>
+                <strong>￥{{ expandedSettlement.snapshot?.orders?.agentProfit ?? expandedSettlement.agentProfit }}</strong>
+              </article>
+              <article class="metric-card">
+                <span>快照平台利润</span>
+                <strong>￥{{ expandedSettlement.snapshot?.orders?.platformProfit ?? expandedSettlement.platformProfit }}</strong>
+              </article>
+              <article class="metric-card">
+                <span>快照已打款</span>
+                <strong>￥{{ expandedSettlement.snapshot?.withdrawals?.paidAmount ?? expandedSettlement.withdrawalAmount }}</strong>
+              </article>
+            </div>
+            <div v-if="settlementDetails[expandedSettlement.id]">
+              <div class="panel-heading subtle">
+                <h3>订单明细</h3>
+                <span>{{ settlementDetails[expandedSettlement.id].orders.meta.total }} 笔订单</span>
+              </div>
+              <table>
+                <thead>
+                  <tr>
+                    <th>订单号</th>
+                    <th>代理</th>
+                    <th>分站</th>
+                    <th>商品</th>
+                    <th>数量</th>
+                    <th>成交</th>
+                    <th>成本</th>
+                    <th>代理分润</th>
+                    <th>平台利润</th>
+                    <th>支付时间</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="order in settlementDetails[expandedSettlement.id].orders.items"
+                    :key="order.id"
+                  >
+                    <td>{{ order.orderNo }}</td>
+                    <td>{{ order.agentUsername ?? '-' }}</td>
+                    <td>{{ order.siteName ?? '-' }}</td>
+                    <td>{{ order.productName ?? '-' }}</td>
+                    <td>{{ order.quantity }}</td>
+                    <td>￥{{ order.totalAmount }}</td>
+                    <td>￥{{ order.costAmount }}</td>
+                    <td>￥{{ order.agentProfit }}</td>
+                    <td>￥{{ order.platformProfit }}</td>
+                    <td>{{ order.paidAt ? new Date(order.paidAt).toLocaleString() : '-' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div class="pagination-bar">
+                <button
+                  class="table-button"
+                  type="button"
+                  :disabled="settlementDetails[expandedSettlement.id].orders.meta.page <= 1"
+                  @click="changeSettlementDetailPage(expandedSettlement.id, 'orders', -1)"
+                >
+                  上一页
+                </button>
+                <span>
+                  第 {{ settlementDetails[expandedSettlement.id].orders.meta.page }} /
+                  {{ settlementDetails[expandedSettlement.id].orders.meta.totalPages }} 页
+                </span>
+                <button
+                  class="table-button"
+                  type="button"
+                  :disabled="settlementDetails[expandedSettlement.id].orders.meta.page >= settlementDetails[expandedSettlement.id].orders.meta.totalPages"
+                  @click="changeSettlementDetailPage(expandedSettlement.id, 'orders', 1)"
+                >
+                  下一页
+                </button>
+              </div>
+              <div class="panel-heading subtle">
+                <h3>提现明细</h3>
+                <span>{{ settlementDetails[expandedSettlement.id].withdrawals.meta.total }} 笔已打款</span>
+              </div>
+              <table>
+                <thead>
+                  <tr>
+                    <th>代理</th>
+                    <th>金额</th>
+                    <th>账号</th>
+                    <th>备注</th>
+                    <th>打款时间</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="withdrawal in settlementDetails[expandedSettlement.id].withdrawals.items"
+                    :key="withdrawal.id"
+                  >
+                    <td>{{ withdrawal.username }}</td>
+                    <td>￥{{ withdrawal.amount }}</td>
+                    <td>{{ withdrawal.accountType }} / {{ withdrawal.accountName }} / {{ withdrawal.accountNo }}</td>
+                    <td>{{ withdrawal.reviewRemark ?? '-' }}</td>
+                    <td>{{ withdrawal.paidAt ? new Date(withdrawal.paidAt).toLocaleString() : '-' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div class="pagination-bar">
+                <button
+                  class="table-button"
+                  type="button"
+                  :disabled="settlementDetails[expandedSettlement.id].withdrawals.meta.page <= 1"
+                  @click="changeSettlementDetailPage(expandedSettlement.id, 'withdrawals', -1)"
+                >
+                  上一页
+                </button>
+                <span>
+                  第 {{ settlementDetails[expandedSettlement.id].withdrawals.meta.page }} /
+                  {{ settlementDetails[expandedSettlement.id].withdrawals.meta.totalPages }} 页
+                </span>
+                <button
+                  class="table-button"
+                  type="button"
+                  :disabled="settlementDetails[expandedSettlement.id].withdrawals.meta.page >= settlementDetails[expandedSettlement.id].withdrawals.meta.totalPages"
+                  @click="changeSettlementDetailPage(expandedSettlement.id, 'withdrawals', 1)"
+                >
+                  下一页
+                </button>
+              </div>
+            </div>
+          </div>
+          <p
+            v-if="adminSettlements.length === 0"
+            class="empty-text"
+          >
+            暂无结算单。
+          </p>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <h2>财务审计日志</h2>
+            <span>共 {{ auditLogs.meta.total }} 条资金相关操作</span>
+          </div>
+          <form
+            class="form-grid four"
+            @submit.prevent="applyAuditLogFilter"
+          >
+            <label>
+              动作
+              <input
+                v-model="auditLogFilter.action"
+                placeholder="finance.settlement"
+              >
+            </label>
+            <label>
+              对象类型
+              <input
+                v-model="auditLogFilter.targetType"
+                placeholder="settlement / withdrawal"
+              >
+            </label>
+            <label>
+              对象 ID
+              <input v-model="auditLogFilter.targetId">
+            </label>
+            <button
+              class="solid-button"
+              type="submit"
+            >
+              筛选日志
+            </button>
+          </form>
+          <table>
+            <thead>
+              <tr>
+                <th>动作</th>
+                <th>操作人</th>
+                <th>IP</th>
+                <th>对象</th>
+                <th>详情</th>
+                <th>时间</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="log in auditLogs.items"
+                :key="log.id"
+              >
+                <td>{{ log.action }}</td>
+                <td>{{ log.userId ?? '-' }}</td>
+                <td>{{ log.ip ?? '-' }}</td>
+                <td>{{ log.targetType ?? '-' }} / {{ log.targetId ?? '-' }}</td>
+                <td>{{ formatAuditDetail(log.detail) }}</td>
+                <td>{{ new Date(log.createdAt).toLocaleString() }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="pagination-bar">
+            <button
+              class="table-button"
+              type="button"
+              :disabled="auditLogs.meta.page <= 1"
+              @click="changeAuditLogPage(-1)"
+            >
+              上一页
+            </button>
+            <span>
+              第 {{ auditLogs.meta.page }} / {{ auditLogs.meta.totalPages }} 页
+            </span>
+            <button
+              class="table-button"
+              type="button"
+              :disabled="auditLogs.meta.page >= auditLogs.meta.totalPages"
+              @click="changeAuditLogPage(1)"
+            >
+              下一页
+            </button>
+          </div>
+          <p
+            v-if="auditLogs.items.length === 0"
+            class="empty-text"
+          >
+            暂无财务审计日志。
+          </p>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading">
             <h2>提现审核</h2>
             <span>{{ adminWithdrawals.length }} 条提现申请</span>
           </div>
@@ -2131,6 +3082,259 @@ onMounted(() => {
             <strong>{{ agentWithdrawals.length }}</strong>
           </article>
         </div>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <h2>我的本期对账</h2>
+            <span>按订单支付时间和打款时间统计</span>
+          </div>
+          <form
+            class="form-grid three"
+            @submit.prevent="loadFinanceReports"
+          >
+            <label>
+              开始日期
+              <input
+                v-model="financeReportFilter.startDate"
+                type="date"
+              >
+            </label>
+            <label>
+              结束日期
+              <input
+                v-model="financeReportFilter.endDate"
+                type="date"
+              >
+            </label>
+            <button
+              class="solid-button"
+              type="submit"
+            >
+              刷新对账
+            </button>
+          </form>
+          <div class="metric-grid compact">
+            <article class="metric-card">
+              <span>已支付订单</span>
+              <strong>{{ agentFinanceReport.orders.paidCount }}</strong>
+            </article>
+            <article class="metric-card">
+              <span>成交金额</span>
+              <strong>￥{{ agentFinanceReport.orders.paidAmount }}</strong>
+            </article>
+            <article class="metric-card">
+              <span>应得利润</span>
+              <strong>￥{{ agentFinanceReport.orders.agentProfit }}</strong>
+            </article>
+            <article class="metric-card">
+              <span>已入账利润</span>
+              <strong>￥{{ agentFinanceReport.profit.creditedAmount }}</strong>
+            </article>
+            <article class="metric-card">
+              <span>已打款金额</span>
+              <strong>￥{{ agentFinanceReport.withdrawals.paidAmount }}</strong>
+            </article>
+            <article class="metric-card">
+              <span>已打款次数</span>
+              <strong>{{ agentFinanceReport.withdrawals.paidCount }}</strong>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <h2>我的结算单</h2>
+            <span>主站确认后的周期对账快照</span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>结算号</th>
+                <th>周期</th>
+                <th>状态</th>
+                <th>订单</th>
+                <th>成交</th>
+                <th>我的利润</th>
+                <th>已打款</th>
+                <th>生成时间</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="settlement in agentSettlements"
+                :key="settlement.id"
+              >
+                <td>{{ settlement.settlementNo }}</td>
+                <td>
+                  {{ new Date(settlement.periodStart).toLocaleDateString() }}
+                  -
+                  {{ new Date(settlement.periodEnd).toLocaleDateString() }}
+                </td>
+                <td>{{ settlement.status }}</td>
+                <td>{{ settlement.paidOrderCount }}</td>
+                <td>￥{{ settlement.paidAmount }}</td>
+                <td>￥{{ settlement.agentProfit }}</td>
+                <td>￥{{ settlement.withdrawalAmount }}</td>
+                <td>{{ new Date(settlement.createdAt).toLocaleString() }}</td>
+                <td>
+                  <button
+                    class="table-button"
+                    type="button"
+                    @click="toggleAgentSettlementSnapshot(settlement.id)"
+                  >
+                    快照
+                  </button>
+                  <button
+                    class="table-button"
+                    type="button"
+                    @click="loadAgentSettlementDetails(settlement.id)"
+                  >
+                    明细
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div
+            v-if="expandedAgentSettlement"
+            class="settlement-snapshot"
+          >
+            <div class="panel-heading subtle">
+              <h3>结算快照：{{ expandedAgentSettlement.settlementNo }}</h3>
+              <span>
+                生成于
+                {{ expandedAgentSettlement.snapshot?.generatedAt ? new Date(expandedAgentSettlement.snapshot.generatedAt).toLocaleString() : '-' }}
+              </span>
+            </div>
+            <div class="metric-grid compact">
+              <article class="metric-card">
+                <span>快照订单数</span>
+                <strong>{{ expandedAgentSettlement.snapshot?.orders?.paidCount ?? expandedAgentSettlement.paidOrderCount }}</strong>
+              </article>
+              <article class="metric-card">
+                <span>快照成交</span>
+                <strong>￥{{ expandedAgentSettlement.snapshot?.orders?.paidAmount ?? expandedAgentSettlement.paidAmount }}</strong>
+              </article>
+              <article class="metric-card">
+                <span>快照我的利润</span>
+                <strong>￥{{ expandedAgentSettlement.snapshot?.orders?.agentProfit ?? expandedAgentSettlement.agentProfit }}</strong>
+              </article>
+              <article class="metric-card">
+                <span>快照已打款</span>
+                <strong>￥{{ expandedAgentSettlement.snapshot?.withdrawals?.paidAmount ?? expandedAgentSettlement.withdrawalAmount }}</strong>
+              </article>
+            </div>
+            <div v-if="agentSettlementDetails[expandedAgentSettlement.id]">
+              <div class="panel-heading subtle">
+                <h3>我的订单明细</h3>
+                <span>{{ agentSettlementDetails[expandedAgentSettlement.id].orders.meta.total }} 笔订单</span>
+              </div>
+              <table>
+                <thead>
+                  <tr>
+                    <th>订单号</th>
+                    <th>分站</th>
+                    <th>商品</th>
+                    <th>数量</th>
+                    <th>成交</th>
+                    <th>我的利润</th>
+                    <th>支付时间</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="order in agentSettlementDetails[expandedAgentSettlement.id].orders.items"
+                    :key="order.id"
+                  >
+                    <td>{{ order.orderNo }}</td>
+                    <td>{{ order.siteName ?? '-' }}</td>
+                    <td>{{ order.productName ?? '-' }}</td>
+                    <td>{{ order.quantity }}</td>
+                    <td>￥{{ order.totalAmount }}</td>
+                    <td>￥{{ order.agentProfit }}</td>
+                    <td>{{ order.paidAt ? new Date(order.paidAt).toLocaleString() : '-' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div class="pagination-bar">
+                <button
+                  class="table-button"
+                  type="button"
+                  :disabled="agentSettlementDetails[expandedAgentSettlement.id].orders.meta.page <= 1"
+                  @click="changeAgentSettlementDetailPage(expandedAgentSettlement.id, 'orders', -1)"
+                >
+                  上一页
+                </button>
+                <span>
+                  第 {{ agentSettlementDetails[expandedAgentSettlement.id].orders.meta.page }} /
+                  {{ agentSettlementDetails[expandedAgentSettlement.id].orders.meta.totalPages }} 页
+                </span>
+                <button
+                  class="table-button"
+                  type="button"
+                  :disabled="agentSettlementDetails[expandedAgentSettlement.id].orders.meta.page >= agentSettlementDetails[expandedAgentSettlement.id].orders.meta.totalPages"
+                  @click="changeAgentSettlementDetailPage(expandedAgentSettlement.id, 'orders', 1)"
+                >
+                  下一页
+                </button>
+              </div>
+              <div class="panel-heading subtle">
+                <h3>我的提现明细</h3>
+                <span>{{ agentSettlementDetails[expandedAgentSettlement.id].withdrawals.meta.total }} 笔已打款</span>
+              </div>
+              <table>
+                <thead>
+                  <tr>
+                    <th>金额</th>
+                    <th>账号</th>
+                    <th>备注</th>
+                    <th>打款时间</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="withdrawal in agentSettlementDetails[expandedAgentSettlement.id].withdrawals.items"
+                    :key="withdrawal.id"
+                  >
+                    <td>￥{{ withdrawal.amount }}</td>
+                    <td>{{ withdrawal.accountType }} / {{ withdrawal.accountName }} / {{ withdrawal.accountNo }}</td>
+                    <td>{{ withdrawal.reviewRemark ?? '-' }}</td>
+                    <td>{{ withdrawal.paidAt ? new Date(withdrawal.paidAt).toLocaleString() : '-' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div class="pagination-bar">
+                <button
+                  class="table-button"
+                  type="button"
+                  :disabled="agentSettlementDetails[expandedAgentSettlement.id].withdrawals.meta.page <= 1"
+                  @click="changeAgentSettlementDetailPage(expandedAgentSettlement.id, 'withdrawals', -1)"
+                >
+                  上一页
+                </button>
+                <span>
+                  第 {{ agentSettlementDetails[expandedAgentSettlement.id].withdrawals.meta.page }} /
+                  {{ agentSettlementDetails[expandedAgentSettlement.id].withdrawals.meta.totalPages }} 页
+                </span>
+                <button
+                  class="table-button"
+                  type="button"
+                  :disabled="agentSettlementDetails[expandedAgentSettlement.id].withdrawals.meta.page >= agentSettlementDetails[expandedAgentSettlement.id].withdrawals.meta.totalPages"
+                  @click="changeAgentSettlementDetailPage(expandedAgentSettlement.id, 'withdrawals', 1)"
+                >
+                  下一页
+                </button>
+              </div>
+            </div>
+          </div>
+          <p
+            v-if="agentSettlements.length === 0"
+            class="empty-text"
+          >
+            暂无结算单。
+          </p>
+        </section>
 
         <section class="panel">
           <div class="panel-heading">
