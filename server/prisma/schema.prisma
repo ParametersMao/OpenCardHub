@@ -137,6 +137,8 @@ model User {
   financeTransactions FinanceTransaction[]
   withdrawals  Withdrawal[]
   settlements  Settlement[]
+  requestedApprovals ApprovalRequest[] @relation("ApprovalRequester")
+  reviewedApprovals  ApprovalRequest[] @relation("ApprovalReviewer")
 
   @@map("users")
 }
@@ -432,6 +434,23 @@ model Payment {
   @@map("payments")
 }
 
+model PaymentNotifyLog {
+  id            BigInt   @id @default(autoincrement())
+  provider      String   @db.VarChar(64)
+  paymentNo     String?  @map("payment_no") @db.VarChar(96)
+  orderNo       String?  @map("order_no") @db.VarChar(64)
+  status        String   @db.VarChar(32)
+  verified      Boolean  @default(false)
+  errorMessage  String?  @map("error_message") @db.VarChar(255)
+  rawNotifyJson Json     @map("raw_notify_json")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([provider, paymentNo])
+  @@index([orderNo])
+  @@index([status])
+  @@map("payment_notify_logs")
+}
+
 model FinanceTransaction {
   id           BigInt                 @id @default(autoincrement())
   userId       BigInt                 @map("user_id")
@@ -543,4 +562,33 @@ model OperationLog {
   @@index([userId])
   @@index([targetType, targetId])
   @@map("operation_logs")
+}
+
+model ApprovalRequest {
+  id             BigInt    @id @default(autoincrement())
+  requestNo      String    @unique @map("request_no") @db.VarChar(64)
+  type           String    @db.VarChar(64)
+  status         String    @default("pending") @db.VarChar(32)
+  requesterId    BigInt?   @map("requester_id")
+  reviewerId     BigInt?   @map("reviewer_id")
+  targetType     String?   @map("target_type") @db.VarChar(64)
+  targetId       BigInt?   @map("target_id")
+  action         String    @db.VarChar(96)
+  payloadJson    Json      @map("payload_json")
+  resultJson     Json?     @map("result_json")
+  remark         String?   @db.VarChar(255)
+  reviewRemark   String?   @map("review_remark") @db.VarChar(255)
+  createdAt      DateTime  @default(now()) @map("created_at")
+  reviewedAt     DateTime? @map("reviewed_at")
+  appliedAt      DateTime? @map("applied_at")
+
+  requester      User?     @relation("ApprovalRequester", fields: [requesterId], references: [id], onDelete: SetNull)
+  reviewer       User?     @relation("ApprovalReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([type])
+  @@index([requesterId])
+  @@index([reviewerId])
+  @@index([targetType, targetId])
+  @@map("approval_requests")
 }

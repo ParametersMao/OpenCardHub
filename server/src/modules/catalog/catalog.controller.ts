@@ -1,5 +1,8 @@
 import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { AdminGuard } from '../auth/admin.guard';
+import { AdminPermissionGuard } from '../auth/admin-permission.guard';
+import { ADMIN_PERMISSIONS } from '../auth/admin-permissions';
+import { RequireAdminPermission } from '../auth/require-admin-permission.decorator';
 import { CatalogService } from './catalog.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -7,7 +10,8 @@ import { UpdateCategoryDto } from './dto/update-category.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { UpsertSiteProductDto } from './dto/upsert-site-product.dto';
 
-@UseGuards(AdminGuard)
+@UseGuards(AdminGuard, AdminPermissionGuard)
+@RequireAdminPermission(ADMIN_PERMISSIONS.catalogManage)
 @Controller('catalog')
 export class CatalogController {
   constructor(private readonly catalogService: CatalogService) {}

@@ -1,4 +1,11 @@
-import { IsEmail, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsEmail,
+  IsIn,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 import {
   LEVEL_CODES,
   type LevelCode,
@@ -13,6 +20,7 @@ export class CreateUserDto {
   username!: string;
 
   @IsString()
+  @MinLength(6)
   @MaxLength(128)
   password!: string;
 

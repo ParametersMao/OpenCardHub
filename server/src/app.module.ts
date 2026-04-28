@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
+import { ApprovalModule } from './modules/approval/approval.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CapabilityModule } from './modules/capability/capability.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
@@ -12,6 +13,7 @@ import { InventoryModule } from './modules/inventory/inventory.module';
 import { OrderModule } from './modules/order/order.module';
 import { PaymentModule } from './modules/payment/payment.module';
 import { PricingModule } from './modules/pricing/pricing.module';
+import { SecurityModule } from './modules/security/security.module';
 import { SiteModule } from './modules/site/site.module';
 import { StorefrontModule } from './modules/storefront/storefront.module';
 import { UserModule } from './modules/user/user.module';
@@ -24,6 +26,7 @@ import { UserModule } from './modules/user/user.module';
     }),
     DatabaseModule,
     HealthModule,
+    ApprovalModule,
     AuthModule,
     ConfigCenterModule,
     UserModule,
@@ -34,6 +37,7 @@ import { UserModule } from './modules/user/user.module';
     OrderModule,
     PaymentModule,
     PricingModule,
+    SecurityModule,
     SiteModule,
     StorefrontModule,
   ],

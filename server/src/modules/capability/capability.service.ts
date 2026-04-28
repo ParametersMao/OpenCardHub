@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma, UserLevelCode } from '@prisma/client';
+import type { AuthUser } from '../auth/auth.types';
 import type { CapabilityKey, LevelCode } from './capability.constants';
 import { DEFAULT_LEVEL_TEMPLATES } from './default-levels';
 import type {
@@ -9,6 +10,12 @@ import type {
 } from './capability.types';
 import { PrismaService } from '../database/prisma.service';
 import type { UpdateLevelCapabilityDto } from './dto/update-level-capability.dto';
+
+interface CapabilityAuditContext {
+  operator?: AuthUser;
+  ip?: string;
+  userAgent?: string;
+}
 
 @Injectable()
 export class CapabilityService {
@@ -132,48 +139,86 @@ export class CapabilityService {
     level: LevelCode,
     key: CapabilityKey,
     input: UpdateLevelCapabilityDto,
+    audit?: CapabilityAuditContext,
   ): Promise<PersistedLevelTemplate> {
-    const levelRecord = await this.prisma.agentLevel.upsert({
-      where: {
-        code: level,
-      },
-      create: {
-        code: level,
-        name: level,
-      },
-      update: {},
-    });
-
-    await this.prisma.levelCapability.upsert({
-      where: {
-        levelId_capabilityKey: {
-          levelId: levelRecord.id,
-          capabilityKey: key,
+    const updatedLevel = await this.prisma.$transaction(async (tx) => {
+      const levelRecord = await tx.agentLevel.upsert({
+        where: {
+          code: level,
         },
-      },
-      create: {
-        levelId: levelRecord.id,
-        capabilityKey: key,
-        enabled: input.enabled,
-        limitValue: input.limitValue,
-      },
-      update: {
-        enabled: input.enabled,
-        limitValue: input.limitValue,
-      },
-    });
+        create: {
+          code: level,
+          name: level,
+        },
+        update: {},
+      });
 
-    const [updatedLevel] = await this.prisma.agentLevel.findMany({
-      where: {
-        id: levelRecord.id,
-      },
-      include: {
-        capabilities: {
-          orderBy: {
-            capabilityKey: 'asc',
+      const existingCapability = await tx.levelCapability.findUnique({
+        where: {
+          levelId_capabilityKey: {
+            levelId: levelRecord.id,
+            capabilityKey: key,
           },
         },
-      },
+      });
+
+      await tx.levelCapability.upsert({
+        where: {
+          levelId_capabilityKey: {
+            levelId: levelRecord.id,
+            capabilityKey: key,
+          },
+        },
+        create: {
+          levelId: levelRecord.id,
+          capabilityKey: key,
+          enabled: input.enabled,
+          limitValue: input.limitValue,
+        },
+        update: {
+          enabled: input.enabled,
+          limitValue: input.limitValue,
+        },
+      });
+
+      await tx.operationLog.create({
+        data: {
+          userId: audit?.operator ? BigInt(audit.operator.id) : undefined,
+          action: 'capability.level.update',
+          targetType: 'agent_level',
+          targetId: levelRecord.id,
+          ip: audit?.ip,
+          detailJson: this.toPrismaJson({
+            level,
+            capability: key,
+            before: existingCapability
+              ? {
+                  enabled: existingCapability.enabled,
+                  limitValue: existingCapability.limitValue,
+                }
+              : undefined,
+            after: {
+              enabled: input.enabled,
+              limitValue: input.limitValue,
+            },
+            operator: audit?.operator?.username,
+            userAgent: audit?.userAgent,
+          }),
+        },
+      });
+
+      return tx.agentLevel.findUniqueOrThrow({
+        where: {
+          id: levelRecord.id,
+        },
+        include: {
+          capabilities: {
+            orderBy: {
+              capabilityKey: 'asc',
+            },
+          },
+        },
+      });
     });
 
     return {

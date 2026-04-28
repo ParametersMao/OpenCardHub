@@ -1,10 +1,14 @@
 import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { AdminGuard } from '../auth/admin.guard';
+import { AdminPermissionGuard } from '../auth/admin-permission.guard';
+import { ADMIN_PERMISSIONS } from '../auth/admin-permissions';
+import { RequireAdminPermission } from '../auth/require-admin-permission.decorator';
 import { ImportCardsDto } from './dto/import-cards.dto';
 import { LockCardsDto } from './dto/lock-cards.dto';
 import { InventoryService } from './inventory.service';
 
-@UseGuards(AdminGuard)
+@UseGuards(AdminGuard, AdminPermissionGuard)
+@RequireAdminPermission(ADMIN_PERMISSIONS.inventoryManage)
 @Controller('inventory')
 export class InventoryController {
   constructor(private readonly inventoryService: InventoryService) {}

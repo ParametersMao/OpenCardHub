@@ -12,6 +12,9 @@ import {
 } from '@nestjs/common';
 import type { AuthUser } from '../auth/auth.types';
 import { AdminGuard } from '../auth/admin.guard';
+import { AdminPermissionGuard } from '../auth/admin-permission.guard';
+import { ADMIN_PERMISSIONS } from '../auth/admin-permissions';
+import { RequireAdminPermission } from '../auth/require-admin-permission.decorator';
 import { AuditLogQueryDto } from './dto/audit-log-query.dto';
 import { CreateSettlementDto } from './dto/create-settlement.dto';
 import { ReportQueryDto } from './dto/report-query.dto';
@@ -26,7 +29,8 @@ interface AuthenticatedRequest {
   headers: Record<string, string | string[] | undefined>;
 }
 
-@UseGuards(AdminGuard)
+@UseGuards(AdminGuard, AdminPermissionGuard)
+@RequireAdminPermission(ADMIN_PERMISSIONS.financeView)
 @Controller('finance')
 export class FinanceController {
   constructor(private readonly financeService: FinanceService) {}
@@ -67,6 +71,7 @@ export class FinanceController {
   }
 
   @Patch('settlements/:id')
+  @RequireAdminPermission(ADMIN_PERMISSIONS.financeReview)
   reviewSettlement(
     @Param('id') id: string,
     @Body() input: ReviewSettlementDto,
@@ -80,6 +85,7 @@ export class FinanceController {
   }
 
   @Post('settlements')
+  @RequireAdminPermission(ADMIN_PERMISSIONS.financeReview)
   createSettlement(
     @Body() input: CreateSettlementDto,
     @Req() request: AuthenticatedRequest,
@@ -96,6 +102,7 @@ export class FinanceController {
   }
 
   @Patch('withdrawals/:id')
+  @RequireAdminPermission(ADMIN_PERMISSIONS.financeReview)
   reviewWithdrawal(
     @Param('id') id: string,
     @Body() input: ReviewWithdrawalDto,

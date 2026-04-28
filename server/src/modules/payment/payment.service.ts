@@ -117,23 +117,80 @@ export class PaymentService {
   }
 
   async handleAlipayCallback(input: Record<string, unknown>) {
-    const verified = await this.alipayProvider.verifyCallback(input);
-    const order = await this.prisma.order.findUnique({
-      where: {
+    try {
+      const verified = await this.alipayProvider.verifyCallback(input);
+      const order = await this.prisma.order.findUnique({
+        where: {
+          orderNo: verified.orderNo,
+        },
+      });
+
+      if (!order) {
+        throw new BadRequestException('Order not found.');
+      }
+
+      await this.createNotifyLog({
+        provider: verified.provider,
+        paymentNo: verified.paymentNo,
         orderNo: verified.orderNo,
-      },
-    });
+        status: 'verified',
+        verified: true,
+        rawNotify: verified.rawNotify,
+      });
 
-    if (!order) {
-      throw new BadRequestException('Order not found.');
+      const result = await this.orderService.markOrderPaid({
+        orderId: order.id.toString(),
+        provider: verified.provider,
+        paymentNo: verified.paymentNo,
+        amount: verified.amount,
+        rawNotify: verified.rawNotify,
+      });
+
+      await this.createNotifyLog({
+        provider: verified.provider,
+        paymentNo: verified.paymentNo,
+        orderNo: verified.orderNo,
+        status: 'processed',
+        verified: true,
+        rawNotify: verified.rawNotify,
+      });
+
+      return result;
+    } catch (error) {
+      await this.createNotifyLog({
+        provider: 'alipay',
+        paymentNo:
+          this.readString(input, 'trade_no') ?? this.readString(input, 'paymentNo'),
+        orderNo:
+          this.readString(input, 'out_trade_no') ?? this.readString(input, 'orderNo'),
+        status: 'failed',
+        verified: false,
+        errorMessage: error instanceof Error ? error.message : 'Unknown callback error.',
+        rawNotify: input,
+      });
+      throw error;
     }
+  }
 
-    return this.orderService.markOrderPaid({
-      orderId: order.id.toString(),
-      provider: verified.provider,
-      paymentNo: verified.paymentNo,
-      amount: verified.amount,
-      rawNotify: verified.rawNotify,
+  private async createNotifyLog(input: {
+    provider: string;
+    paymentNo?: string;
+    orderNo?: string;
+    status: string;
+    verified: boolean;
+    errorMessage?: string;
+    rawNotify: Record<string, unknown>;
+  }) {
+    await this.prisma.paymentNotifyLog.create({
+      data: {
+        provider: input.provider,
+        paymentNo: input.paymentNo,
+        orderNo: input.orderNo,
+        status: input.status,
+        verified: input.verified,
+        errorMessage: input.errorMessage?.slice(0, 255),
+        rawNotifyJson: input.rawNotify as Prisma.InputJsonValue,
+      },
     });
   }
 

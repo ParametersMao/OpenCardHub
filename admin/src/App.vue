@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 
 type AdminViewKey =
   | 'overview'
+  | 'approvals'
   | 'levels'
   | 'users'
   | 'catalog'
@@ -92,6 +93,55 @@ interface User {
   status?: string;
   balance?: number;
   createdAt?: string;
+}
+
+interface AdminPermissionOption {
+  key: string;
+  label: string;
+  description: string;
+  riskLevel: 'low' | 'medium' | 'high';
+}
+
+interface AdminPermission extends AdminPermissionOption {
+  configured: boolean;
+  enabled: boolean;
+  expiredAt?: string;
+}
+
+interface AdminPermissionProfile {
+  user: User;
+  legacyFullAccess: boolean;
+  permissions: AdminPermission[];
+}
+
+interface EffectiveAdminPermissionProfile {
+  legacyFullAccess: boolean;
+  effectivePermissions: string[];
+  permissions: AdminPermission[];
+}
+
+interface ApprovalRequest {
+  id: string;
+  requestNo: string;
+  type: string;
+  status: string;
+  requesterId?: string;
+  reviewerId?: string;
+  targetType?: string;
+  targetId?: string;
+  action: string;
+  payload?: Record<string, unknown>;
+  result?: Record<string, unknown>;
+  remark?: string;
+  reviewRemark?: string;
+  createdAt: string;
+  reviewedAt?: string;
+  appliedAt?: string;
+}
+
+interface ApprovalActionResult {
+  approvalRequired?: boolean;
+  approval?: ApprovalRequest;
 }
 
 interface StockSnapshot {
@@ -312,6 +362,7 @@ interface AgentFinanceReport {
 
 const adminNavItems: Array<{ key: AdminViewKey; label: string }> = [
   { key: 'overview', label: '总览' },
+  { key: 'approvals', label: '审批' },
   { key: 'levels', label: '等级能力' },
   { key: 'users', label: '用户' },
   { key: 'catalog', label: '商品' },
@@ -324,6 +375,15 @@ const agentNavItems: Array<{ key: AgentViewKey; label: string }> = [
   { key: 'agent-orders', label: '我的订单' },
   { key: 'agent-finance', label: '我的财务' },
 ];
+const adminViewPermissions: Partial<Record<AdminViewKey, string>> = {
+  approvals: 'admin.approvals.review',
+  levels: 'admin.capabilities.manage',
+  users: 'admin.users.manage',
+  catalog: 'admin.catalog.manage',
+  inventory: 'admin.inventory.manage',
+  sites: 'admin.sites.manage',
+  finance: 'admin.finance.view',
+};
 
 const activeView = ref<ViewKey>('overview');
 const loading = ref(false);
@@ -346,6 +406,12 @@ const agentFinanceSummary = ref<FinanceSummary>({
 });
 const agentFinanceTransactions = ref<FinanceTransaction[]>([]);
 const agentWithdrawals = ref<Withdrawal[]>([]);
+const approvalRequests = ref<ApprovalRequest[]>([]);
+const expandedApprovalId = ref('');
+const approvalFilter = ref({
+  status: 'pending',
+  type: '',
+});
 const adminWithdrawals = ref<Withdrawal[]>([]);
 const adminSettlements = ref<Settlement[]>([]);
 const auditLogs = ref<PaginatedResult<AuditLog>>({
@@ -448,6 +514,11 @@ const agentOrderSummary = ref<AgentOrderSummary>({
 });
 const users = ref<User[]>([]);
 const stockSnapshots = ref<Record<string, StockSnapshot>>({});
+const adminPermissionOptions = ref<AdminPermissionOption[]>([]);
+const selectedAdminPermissionUserId = ref('');
+const selectedAdminPermissionProfile = ref<AdminPermissionProfile | null>(null);
+const currentAdminPermissionProfile = ref<EffectiveAdminPermissionProfile | null>(null);
+const adminPermissionLoading = ref(false);
 
 const userForm = ref({
   username: '',
@@ -520,13 +591,19 @@ const settlementForm = ref({
 const editingSites = ref<Record<string, Partial<Site>>>({});
 
 const isAdmin = computed(() => currentUser.value?.role === 'admin');
-const navItems = computed(() => (isAdmin.value ? adminNavItems : agentNavItems));
+const visibleAdminNavItems = computed(() =>
+  adminNavItems.filter((item) => canAccessAdminView(item.key)),
+);
+const navItems = computed(() =>
+  isAdmin.value ? visibleAdminNavItems.value : agentNavItems,
+);
 const currentViewLabel = computed(
   () => navItems.value.find((item) => item.key === activeView.value)?.label,
 );
 const agentUsers = computed(() =>
   users.value.filter((user) => user.role === 'agent' || user.levelCode !== 'V0'),
 );
+const adminUsers = computed(() => users.value.filter((user) => user.role === 'admin'));
 const expandedSettlement = computed(() =>
   adminSettlements.value.find((settlement) => settlement.id === expandedSettlementId.value),
 );
@@ -534,6 +611,9 @@ const expandedAgentSettlement = computed(() =>
   agentSettlements.value.find(
     (settlement) => settlement.id === expandedAgentSettlementId.value,
   ),
+);
+const expandedApproval = computed(() =>
+  approvalRequests.value.find((approval) => approval.id === expandedApprovalId.value),
 );
 const totals = computed(() => [
   { label: '等级模板', value: levels.value.length },
@@ -568,6 +648,38 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+function confirmCriticalAction(messageText: string) {
+  return globalThis.confirm(`高风险操作确认\n\n${messageText}\n\n确认后将立即生效，请确认无误。`);
+}
+
+function hasAdminPermission(permission: string) {
+  const profile = currentAdminPermissionProfile.value;
+
+  if (!profile) {
+    return false;
+  }
+
+  return (
+    profile.legacyFullAccess ||
+    profile.effectivePermissions.includes('admin.full_access') ||
+    profile.effectivePermissions.includes(permission)
+  );
+}
+
+function canAccessAdminView(view: AdminViewKey) {
+  const permission = adminViewPermissions[view];
+
+  return !permission || hasAdminPermission(permission);
+}
+
+function ensureAccessibleAdminView() {
+  if (!isAdminView(activeView.value) || canAccessAdminView(activeView.value)) {
+    return;
+  }
+
+  activeView.value = visibleAdminNavItems.value[0]?.key ?? 'overview';
+}
+
 function buildReportQuery() {
   const params = new globalThis.URLSearchParams();
   if (financeReportFilter.value.startDate) {
@@ -596,6 +708,18 @@ function buildAuditLogQuery() {
   return `?${params.toString()}`;
 }
 
+function buildApprovalQuery() {
+  const params = new globalThis.URLSearchParams();
+  if (approvalFilter.value.status) {
+    params.set('status', approvalFilter.value.status);
+  }
+  if (approvalFilter.value.type.trim()) {
+    params.set('type', approvalFilter.value.type.trim());
+  }
+  const query = params.toString();
+  return query ? `?${query}` : '';
+}
+
 function buildSettlementDetailsQuery(
   pagination: { orderPage: number; withdrawalPage: number } | undefined,
 ) {
@@ -611,6 +735,30 @@ async function loadAuditLogs() {
   auditLogs.value = await request<PaginatedResult<AuditLog>>(
     `/api/finance/audit-logs${buildAuditLogQuery()}`,
   );
+}
+
+async function loadApprovals() {
+  approvalRequests.value = await request<ApprovalRequest[]>(
+    `/api/approvals${buildApprovalQuery()}`,
+  );
+}
+
+async function applyApprovalFilter() {
+  expandedApprovalId.value = '';
+  await loadApprovals();
+}
+
+function toggleApprovalDetails(approvalId: string) {
+  expandedApprovalId.value =
+    expandedApprovalId.value === approvalId ? '' : approvalId;
+}
+
+function resolveApprovalMessage(result: ApprovalActionResult, directMessage: string) {
+  if (result.approvalRequired && result.approval) {
+    return `已提交审批单 ${result.approval.requestNo}，等待审核后生效。`;
+  }
+
+  return directMessage;
 }
 
 async function applyAuditLogFilter() {
@@ -630,6 +778,11 @@ async function changeAuditLogPage(delta: number) {
 
 async function loadFinanceReports() {
   if (isAdmin.value) {
+    if (!hasAdminPermission('admin.finance.view')) {
+      message.value = '当前管理员没有财务查看权限';
+      return;
+    }
+
     adminFinanceReport.value = await request<AdminFinanceReport>(
       `/api/finance/reports/summary${buildReportQuery()}`,
     );
@@ -668,6 +821,7 @@ async function login() {
 function clearSession() {
   accessToken.value = '';
   currentUser.value = null;
+  currentAdminPermissionProfile.value = null;
   localStorage.removeItem('opencardhub_token');
 }
 
@@ -689,12 +843,17 @@ async function loadAll() {
     currentUser.value = me;
 
     if (me.role === 'admin') {
+      currentAdminPermissionProfile.value =
+        await request<EffectiveAdminPermissionProfile>('/api/auth/admin-permissions');
       activeView.value = isAdminView(activeView.value) ? activeView.value : 'overview';
+      ensureAccessibleAdminView();
       await loadAdminData();
     } else if (me.role === 'agent') {
+      currentAdminPermissionProfile.value = null;
       activeView.value = 'agent-sites';
       await loadAgentData();
     } else {
+      currentAdminPermissionProfile.value = null;
       activeView.value = 'agent-sites';
       message.value = '当前账号是普通买家，暂不能进入管理台。';
     }
@@ -710,10 +869,20 @@ function isAdminView(view: ViewKey): view is AdminViewKey {
 }
 
 async function loadAdminData() {
+  const canManageCapabilities = hasAdminPermission('admin.capabilities.manage');
+  const canManageUsers = hasAdminPermission('admin.users.manage');
+  const canManageCatalog = hasAdminPermission('admin.catalog.manage');
+  const canManageInventory = hasAdminPermission('admin.inventory.manage');
+  const canManageSites = hasAdminPermission('admin.sites.manage');
+  const canViewFinance = hasAdminPermission('admin.finance.view');
+  const canReviewApprovals = hasAdminPermission('admin.approvals.review');
+
   const [
+    approvals,
     persistedLevels,
     keys,
     userList,
+    permissionOptions,
     categoryList,
     productList,
     siteList,
@@ -723,22 +892,82 @@ async function loadAdminData() {
     financeSummary,
     financeReport,
   ] = await Promise.all([
-    request<Level[]>('/api/capabilities/levels/persisted'),
-    request<string[]>('/api/capabilities/keys'),
-    request<User[]>('/api/users'),
-    request<Category[]>('/api/catalog/categories'),
-    request<Product[]>('/api/catalog/products'),
-    request<Site[]>('/api/sites'),
-    request<Withdrawal[]>('/api/finance/withdrawals'),
-    request<Settlement[]>('/api/finance/settlements'),
-    request<PaginatedResult<AuditLog>>('/api/finance/audit-logs?page=1&pageSize=20'),
-    request<AdminFinanceSummary>('/api/finance/summary'),
-    request<AdminFinanceReport>('/api/finance/reports/summary'),
+    canReviewApprovals
+      ? request<ApprovalRequest[]>(`/api/approvals${buildApprovalQuery()}`)
+      : Promise.resolve([]),
+    canManageCapabilities
+      ? request<Level[]>('/api/capabilities/levels/persisted')
+      : Promise.resolve([]),
+    canManageCapabilities ? request<string[]>('/api/capabilities/keys') : Promise.resolve([]),
+    canManageUsers ? request<User[]>('/api/users') : Promise.resolve([]),
+    canManageUsers
+      ? request<AdminPermissionOption[]>('/api/users/admin-permission-options')
+      : Promise.resolve([]),
+    canManageCatalog || canManageInventory
+      ? request<Category[]>('/api/catalog/categories')
+      : Promise.resolve([]),
+    canManageCatalog || canManageInventory
+      ? request<Product[]>('/api/catalog/products')
+      : Promise.resolve([]),
+    canManageSites ? request<Site[]>('/api/sites') : Promise.resolve([]),
+    canViewFinance ? request<Withdrawal[]>('/api/finance/withdrawals') : Promise.resolve([]),
+    canViewFinance ? request<Settlement[]>('/api/finance/settlements') : Promise.resolve([]),
+    canViewFinance
+      ? request<PaginatedResult<AuditLog>>('/api/finance/audit-logs?page=1&pageSize=20')
+      : Promise.resolve({
+          items: [],
+          meta: {
+            page: 1,
+            pageSize: 20,
+            total: 0,
+            totalPages: 1,
+          },
+        }),
+    canViewFinance
+      ? request<AdminFinanceSummary>('/api/finance/summary')
+      : Promise.resolve({
+          pendingCount: 0,
+          pendingAmount: 0,
+          approvedCount: 0,
+          approvedAmount: 0,
+          paidCount: 0,
+          paidAmount: 0,
+          rejectedCount: 0,
+          rejectedAmount: 0,
+        }),
+    canViewFinance
+      ? request<AdminFinanceReport>('/api/finance/reports/summary')
+      : Promise.resolve({
+          range: {},
+          orders: {
+            paidCount: 0,
+            paidAmount: 0,
+            costAmount: 0,
+            agentProfit: 0,
+            platformProfit: 0,
+            directCount: 0,
+            directAmount: 0,
+            agentCount: 0,
+            agentAmount: 0,
+          },
+          withdrawals: {
+            pendingCount: 0,
+            pendingAmount: 0,
+            approvedCount: 0,
+            approvedAmount: 0,
+            paidCount: 0,
+            paidAmount: 0,
+            rejectedCount: 0,
+            rejectedAmount: 0,
+          },
+        }),
   ]);
 
+  approvalRequests.value = approvals;
   levels.value = persistedLevels;
   capabilityKeys.value = keys;
   users.value = userList;
+  adminPermissionOptions.value = permissionOptions;
   categories.value = categoryList;
   products.value = productList;
   sites.value = siteList;
@@ -747,6 +976,14 @@ async function loadAdminData() {
   auditLogs.value = auditLogList;
   adminFinanceSummary.value = financeSummary;
   adminFinanceReport.value = financeReport;
+
+  if (
+    selectedAdminPermissionUserId.value &&
+    !adminUsers.value.some((user) => user.id === selectedAdminPermissionUserId.value)
+  ) {
+    selectedAdminPermissionUserId.value = '';
+    selectedAdminPermissionProfile.value = null;
+  }
 }
 
 async function loadAgentData() {
@@ -832,6 +1069,16 @@ async function updateLevelCapability(
   enabled: boolean,
   limitValue?: number,
 ) {
+  if (
+    !confirmCriticalAction(
+      `即将调整等级 ${level.level} 的能力 ${key}：${enabled ? '启用' : '禁用'}${
+        limitValue === undefined ? '' : `，额度/限制值为 ${limitValue}`
+      }。`,
+    )
+  ) {
+    return;
+  }
+
   const updatedLevel = await request<Level>(
     `/api/capabilities/levels/${level.level}/${key}`,
     {
@@ -867,10 +1114,96 @@ async function createUser() {
 }
 
 async function updateUserStatus(user: User, status: 'active' | 'disabled') {
+  if (
+    !confirmCriticalAction(
+      `即将把用户 ${user.username} 的状态从 ${user.status} 调整为 ${status}。`,
+    )
+  ) {
+    return;
+  }
+
   await request(`/api/users/${user.id}`, {
     method: 'PATCH',
     body: JSON.stringify({ status }),
   });
+  await loadAll();
+}
+
+async function loadAdminPermissionProfile(userId = selectedAdminPermissionUserId.value) {
+  if (!userId) {
+    selectedAdminPermissionProfile.value = null;
+    return;
+  }
+
+  adminPermissionLoading.value = true;
+  try {
+    selectedAdminPermissionUserId.value = userId;
+    selectedAdminPermissionProfile.value = await request<AdminPermissionProfile>(
+      `/api/users/${userId}/admin-permissions`,
+    );
+  } finally {
+    adminPermissionLoading.value = false;
+  }
+}
+
+async function updateAdminPermission(permission: AdminPermission, enabled: boolean) {
+  const profile = selectedAdminPermissionProfile.value;
+
+  if (!profile) {
+    return;
+  }
+
+  if (
+    !confirmCriticalAction(
+      `即将${enabled ? '授予' : '移除'}管理员 ${profile.user.username} 的权限「${
+        permission.label
+      }」(${permission.key})。\n\n注意：一旦给管理员配置任意 admin.* 权限，该管理员将进入精细权限模式，不再自动继承旧版全权限。`,
+    )
+  ) {
+    return;
+  }
+
+  const result = await request<ApprovalActionResult>(
+    `/api/users/${profile.user.id}/admin-permissions/${permission.key}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({
+        enabled,
+        remark: 'Updated from admin console',
+      }),
+    },
+  );
+  message.value = resolveApprovalMessage(result, '管理员权限已更新');
+  if (currentUser.value?.id === profile.user.id) {
+    currentAdminPermissionProfile.value =
+      await request<EffectiveAdminPermissionProfile>('/api/auth/admin-permissions');
+    ensureAccessibleAdminView();
+  }
+  await loadAdminPermissionProfile(profile.user.id);
+  await loadAll();
+}
+
+async function reviewApproval(approval: ApprovalRequest, status: 'approved' | 'rejected') {
+  if (
+    !confirmCriticalAction(
+      `即将${status === 'approved' ? '通过' : '驳回'}审批单 ${
+        approval.requestNo
+      }，类型 ${approval.type}，目标 ${approval.targetType ?? '-'} / ${
+        approval.targetId ?? '-'
+      }。`,
+    )
+  ) {
+    return;
+  }
+
+  await request(`/api/approvals/${approval.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      status,
+      reviewRemark: `Reviewed from admin console: ${status}`,
+    }),
+  });
+  message.value = '审批单状态已更新';
   await loadAll();
 }
 
@@ -892,6 +1225,14 @@ async function updateProductStatus(
   product: Product,
   status: 'active' | 'hidden' | 'disabled',
 ) {
+  if (
+    !confirmCriticalAction(
+      `即将把商品「${product.name}」状态从 ${product.status} 调整为 ${status}。`,
+    )
+  ) {
+    return;
+  }
+
   await request(`/api/catalog/products/${product.id}`, {
     method: 'PATCH',
     body: JSON.stringify({ status }),
@@ -957,6 +1298,14 @@ async function updateSiteStatus(
   site: Site,
   status: 'active' | 'suspended' | 'banned',
 ) {
+  if (
+    !confirmCriticalAction(
+      `即将把分站「${site.name}」状态从 ${site.status} 调整为 ${status}。`,
+    )
+  ) {
+    return;
+  }
+
   await request(`/api/sites/${site.id}`, {
     method: 'PATCH',
     body: JSON.stringify({ status }),
@@ -1146,13 +1495,28 @@ async function reviewWithdrawal(
   withdrawal: Withdrawal,
   status: 'approved' | 'rejected' | 'paid',
 ) {
-  await request(`/api/finance/withdrawals/${withdrawal.id}`, {
+  if (
+    !confirmCriticalAction(
+      `即将处理提现申请：用户 ${withdrawal.username ?? withdrawal.userId}，金额 ￥${
+        withdrawal.amount
+      }，收款账号 ${withdrawal.accountType} / ${withdrawal.accountName} / ${
+        withdrawal.accountNo
+      }，状态 ${withdrawal.status} -> ${status}。`,
+    )
+  ) {
+    return;
+  }
+
+  const result = await request<ApprovalActionResult>(
+    `/api/finance/withdrawals/${withdrawal.id}`,
+    {
     method: 'PATCH',
     body: JSON.stringify({
       status,
     }),
-  });
-  message.value = '提现状态已更新';
+    },
+  );
+  message.value = resolveApprovalMessage(result, '提现状态已更新');
   await loadAll();
 }
 
@@ -1185,13 +1549,24 @@ async function reviewSettlement(
   settlement: Settlement,
   status: 'confirmed' | 'archived' | 'voided',
 ) {
-  await request(`/api/finance/settlements/${settlement.id}`, {
+  if (
+    !confirmCriticalAction(
+      `即将处理结算单 ${settlement.settlementNo}：实付金额 ￥${settlement.paidAmount}，提现金额 ￥${settlement.withdrawalAmount}，状态 ${settlement.status} -> ${status}。`,
+    )
+  ) {
+    return;
+  }
+
+  const result = await request<ApprovalActionResult>(
+    `/api/finance/settlements/${settlement.id}`,
+    {
     method: 'PATCH',
     body: JSON.stringify({
       status,
     }),
-  });
-  message.value = '结算单状态已更新';
+    },
+  );
+  message.value = resolveApprovalMessage(result, '结算单状态已更新');
   await loadAll();
 }
 
@@ -1480,6 +1855,137 @@ onMounted(() => {
             <p>已完成：等级能力、配置中心、商品、卡密库存、订单、支付骨架、分站解析、分站商品覆盖、代理自助开站。</p>
             <p>下一步：继续完善代理可配置项、分站商品独立定价、真实支付回调和域名自动化。</p>
           </div>
+        </section>
+      </section>
+
+      <section
+        v-if="activeView === 'approvals'"
+        class="view-stack"
+      >
+        <section class="panel">
+          <div class="panel-heading">
+            <h2>审批中心</h2>
+            <span>{{ approvalRequests.length }} 条审批</span>
+          </div>
+          <form
+            class="form-grid three"
+            @submit.prevent="applyApprovalFilter"
+          >
+            <label>
+              状态
+              <select v-model="approvalFilter.status">
+                <option value="">
+                  全部
+                </option>
+                <option value="pending">
+                  待审批
+                </option>
+                <option value="approved">
+                  已通过
+                </option>
+                <option value="rejected">
+                  已驳回
+                </option>
+              </select>
+            </label>
+            <label>
+              类型
+              <input
+                v-model="approvalFilter.type"
+                placeholder="admin_permission_update / withdrawal_paid"
+              >
+            </label>
+            <button
+              class="solid-button"
+              type="submit"
+            >
+              筛选审批
+            </button>
+          </form>
+          <table>
+            <thead>
+              <tr>
+                <th>审批单</th>
+                <th>类型</th>
+                <th>状态</th>
+                <th>申请人</th>
+                <th>目标</th>
+                <th>内容</th>
+                <th>创建时间</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="approval in approvalRequests"
+                :key="approval.id"
+              >
+                <td>{{ approval.requestNo }}</td>
+                <td>{{ approval.type }}</td>
+                <td>
+                  <span :class="['status-pill', approval.status]">
+                    {{ approval.status }}
+                  </span>
+                </td>
+                <td>{{ approval.requesterId ?? '-' }}</td>
+                <td>{{ approval.targetType ?? '-' }} / {{ approval.targetId ?? '-' }}</td>
+                <td>{{ formatAuditDetail(approval.payload) }}</td>
+                <td>{{ new Date(approval.createdAt).toLocaleString() }}</td>
+                <td>
+                  <button
+                    class="table-button"
+                    type="button"
+                    @click="toggleApprovalDetails(approval.id)"
+                  >
+                    {{ expandedApprovalId === approval.id ? '收起' : '详情' }}
+                  </button>
+                  <button
+                    v-if="approval.status === 'pending'"
+                    class="table-button"
+                    type="button"
+                    @click="reviewApproval(approval, 'approved')"
+                  >
+                    通过
+                  </button>
+                  <button
+                    v-if="approval.status === 'pending'"
+                    class="table-button danger"
+                    type="button"
+                    @click="reviewApproval(approval, 'rejected')"
+                  >
+                    驳回
+                  </button>
+                  <span v-if="approval.status !== 'pending'">
+                    {{ approval.reviewedAt ? new Date(approval.reviewedAt).toLocaleString() : '-' }}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div
+            v-if="expandedApproval"
+            class="approval-detail"
+          >
+            <article>
+              <strong>申请内容</strong>
+              <pre>{{ JSON.stringify(expandedApproval.payload ?? {}, null, 2) }}</pre>
+            </article>
+            <article>
+              <strong>执行结果</strong>
+              <pre>{{ JSON.stringify(expandedApproval.result ?? {}, null, 2) }}</pre>
+            </article>
+            <article>
+              <strong>备注</strong>
+              <p>{{ expandedApproval.remark ?? '-' }}</p>
+              <p>{{ expandedApproval.reviewRemark ?? '-' }}</p>
+            </article>
+          </div>
+          <p
+            v-if="approvalRequests.length === 0"
+            class="empty-text"
+          >
+            暂无审批申请。
+          </p>
         </section>
       </section>
 
@@ -1947,6 +2453,93 @@ onMounted(() => {
               </tr>
             </tbody>
           </table>
+        </section>
+
+        <section class="panel wide">
+          <div class="panel-heading">
+            <h2>管理员权限配置</h2>
+            <span>{{ adminPermissionOptions.length }} 个权限点</span>
+          </div>
+
+          <div class="permission-toolbar">
+            <label>
+              选择管理员
+              <select
+                v-model="selectedAdminPermissionUserId"
+                @change="loadAdminPermissionProfile()"
+              >
+                <option value="">
+                  请选择管理员
+                </option>
+                <option
+                  v-for="user in adminUsers"
+                  :key="user.id"
+                  :value="user.id"
+                >
+                  {{ user.username }} / ID {{ user.id }}
+                </option>
+              </select>
+            </label>
+            <p>
+              未配置任何 admin.* 权限时，该管理员仍按旧版兼容逻辑拥有完整后台权限；一旦配置任意权限，将切换为精细权限模式。
+            </p>
+          </div>
+
+          <div
+            v-if="selectedAdminPermissionProfile"
+            class="permission-summary"
+          >
+            <strong>{{ selectedAdminPermissionProfile.user.username }}</strong>
+            <span>
+              {{
+                selectedAdminPermissionProfile.legacyFullAccess
+                  ? '兼容全权限：尚未显式配置 admin.* 权限'
+                  : '精细权限模式：仅允许已启用权限'
+              }}
+            </span>
+          </div>
+
+          <div
+            v-if="selectedAdminPermissionProfile"
+            class="permission-grid"
+          >
+            <article
+              v-for="permission in selectedAdminPermissionProfile.permissions"
+              :key="permission.key"
+              class="permission-card"
+              :class="{
+                enabled: permission.enabled,
+                high: permission.riskLevel === 'high',
+              }"
+            >
+              <div>
+                <strong>{{ permission.label }}</strong>
+                <code>{{ permission.key }}</code>
+                <p>{{ permission.description }}</p>
+              </div>
+              <label class="inline-toggle">
+                <input
+                  :checked="permission.enabled"
+                  type="checkbox"
+                  :disabled="adminPermissionLoading"
+                  @change="
+                    updateAdminPermission(
+                      permission,
+                      ($event.target as HTMLInputElement).checked,
+                    )
+                  "
+                >
+                {{ permission.enabled ? '已启用' : '未启用' }}
+              </label>
+            </article>
+          </div>
+
+          <p
+            v-else
+            class="empty-text"
+          >
+            请选择一个管理员账号后配置后台权限。
+          </p>
         </section>
       </section>
 

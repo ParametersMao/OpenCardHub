@@ -1,3 +1,4 @@
+import { createVerify } from 'node:crypto';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Decimal } from '@prisma/client/runtime/library';
@@ -44,6 +45,8 @@ export class AlipayProvider implements PaymentProvider {
   async verifyCallback(
     input: Record<string, unknown>,
   ): Promise<PaymentCallbackResult> {
+    this.assertCallbackSignature(input);
+
     const orderNo =
       this.readString(input, 'out_trade_no') ?? this.readRequiredString(input, 'orderNo');
     const paymentNo =
@@ -103,6 +106,57 @@ export class AlipayProvider implements PaymentProvider {
     }
 
     return `${gateway}?${params.toString()}`;
+  }
+
+  private assertCallbackSignature(input: Record<string, unknown>) {
+    const mode = this.configService.get<string>('ALIPAY_MODE', 'mock');
+    const shouldVerify = this.configService.get<string>(
+      'ALIPAY_VERIFY_CALLBACK_SIGNATURE',
+      mode === 'mock' ? 'false' : 'true',
+    );
+
+    if (shouldVerify !== 'true') {
+      return;
+    }
+
+    const signature = this.readRequiredString(input, 'sign');
+    const signType = this.readString(input, 'sign_type') ?? 'RSA2';
+    const publicKey = this.configService.get<string>('ALIPAY_PUBLIC_KEY');
+
+    if (!publicKey) {
+      throw new BadRequestException('ALIPAY_PUBLIC_KEY is required for callback verification.');
+    }
+
+    if (signType !== 'RSA2') {
+      throw new BadRequestException(`Unsupported Alipay sign type: ${signType}`);
+    }
+
+    const verify = createVerify('RSA-SHA256');
+    verify.update(this.createSignContent(input));
+    verify.end();
+
+    if (!verify.verify(this.normalizePublicKey(publicKey), signature, 'base64')) {
+      throw new BadRequestException('Invalid Alipay callback signature.');
+    }
+  }
+
+  private createSignContent(input: Record<string, unknown>) {
+    return Object.entries(input)
+      .filter(([key, value]) => key !== 'sign' && key !== 'sign_type' && value !== undefined)
+      .map(([key, value]) => [key, String(value)] as const)
+      .filter(([, value]) => value.length > 0)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, value]) => `${key}=${value}`)
+      .join('&');
+  }
+
+  private normalizePublicKey(publicKey: string) {
+    if (publicKey.includes('BEGIN PUBLIC KEY')) {
+      return publicKey;
+    }
+
+    const lines = publicKey.match(/.{1,64}/g)?.join('\n') ?? publicKey;
+    return `-----BEGIN PUBLIC KEY-----\n${lines}\n-----END PUBLIC KEY-----`;
   }
 
   private readRequiredString(

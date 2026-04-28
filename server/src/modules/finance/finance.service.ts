@@ -7,6 +7,7 @@ import {
   type Withdrawal,
 } from '@prisma/client';
 import type { AuthUser } from '../auth/auth.types';
+import { ApprovalService } from '../approval/approval.service';
 import { PrismaService } from '../database/prisma.service';
 import type { AuditLogQueryDto } from './dto/audit-log-query.dto';
 import type { CreateSettlementDto } from './dto/create-settlement.dto';
@@ -24,7 +25,10 @@ interface AuditContext {
 
 @Injectable()
 export class FinanceService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly approvalService: ApprovalService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   async creditOrderProfit(input: {
     userId: bigint;
@@ -604,6 +608,46 @@ export class FinanceService {
     input: ReviewSettlementDto,
     audit?: AuditContext,
   ) {
+    if (
+      this.approvalService.isSettlementReviewApprovalRequired() &&
+      (input.status === 'confirmed' || input.status === 'voided')
+    ) {
+      const current = await this.prisma.settlement.findUnique({
+        where: {
+          id: BigInt(id),
+        },
+      });
+
+      if (!current) {
+        throw new BadRequestException('Settlement not found.');
+      }
+
+      if (current.status === input.status) {
+        return this.mapSettlement(current);
+      }
+
+      this.assertSettlementTransition(current.status, input.status);
+
+      return {
+        approvalRequired: true,
+        approval: await this.approvalService.createApprovalRequest(
+          {
+            type: 'settlement_review',
+            action: 'finance.settlement.review',
+            targetType: 'settlement',
+            targetId: current.id,
+            payload: {
+              settlementId: current.id.toString(),
+              status: input.status,
+              remark: input.remark,
+            },
+            remark: input.remark,
+          },
+          audit,
+        ),
+      };
+    }
+
     const settlement = await this.prisma.$transaction(async (tx) => {
       const current = await tx.settlement.findUnique({
         where: {
@@ -663,6 +707,50 @@ export class FinanceService {
     input: ReviewWithdrawalDto,
     audit?: AuditContext,
   ) {
+    if (
+      this.approvalService.isWithdrawalPaidApprovalRequired() &&
+      input.status === 'paid'
+    ) {
+      const current = await this.prisma.withdrawal.findUnique({
+        where: {
+          id: BigInt(id),
+        },
+      });
+
+      if (!current) {
+        throw new BadRequestException('Withdrawal not found.');
+      }
+
+      if (current.status === input.status) {
+        return this.mapWithdrawal(current);
+      }
+
+      if (current.status === 'rejected') {
+        throw new BadRequestException('Withdrawal is already finished.');
+      }
+
+      this.assertWithdrawalTransition(current.status, input.status);
+
+      return {
+        approvalRequired: true,
+        approval: await this.approvalService.createApprovalRequest(
+          {
+            type: 'withdrawal_paid',
+            action: 'finance.withdrawal.review',
+            targetType: 'withdrawal',
+            targetId: current.id,
+            payload: {
+              withdrawalId: current.id.toString(),
+              status: input.status,
+              reviewRemark: input.reviewRemark,
+            },
+            remark: input.reviewRemark,
+          },
+          audit,
+        ),
+      };
+    }
+
     const withdrawal = await this.prisma.$transaction(async (tx) => {
       const current = await tx.withdrawal.findUnique({
         where: {
